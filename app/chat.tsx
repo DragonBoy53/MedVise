@@ -20,13 +20,12 @@ const WINDOW = Dimensions.get("window");
 export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [firstMessageSent, setFirstMessageSent] = useState(false);
-  const keyboardOffset = useRef(new Animated.Value(0)).current;
 
   const pulseScale = useRef(new Animated.Value(1)).current;
   const pulseOpacity = useRef(new Animated.Value(0.6)).current;
   const centerScale = useRef(new Animated.Value(1)).current;
 
+  // Pulsing animation
   useEffect(() => {
     Animated.loop(
       Animated.parallel([
@@ -62,27 +61,6 @@ export default function ChatScreen() {
     ).start();
   }, []);
 
-  useEffect(() => {
-    const show = Keyboard.addListener("keyboardDidShow", (e) => {
-      if (!firstMessageSent) setFirstMessageSent(true);
-      Animated.timing(keyboardOffset, {
-        toValue: e.endCoordinates.height,
-        duration: 200,
-        useNativeDriver: false,
-      }).start();
-    });
-    const hide = Keyboard.addListener("keyboardDidHide", () => {
-      Animated.timing(keyboardOffset, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: false,
-      }).start();
-    });
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, [firstMessageSent]);
 
   const handleCenterPress = () => {
     Animated.sequence([
@@ -101,13 +79,11 @@ export default function ChatScreen() {
 
   const sendMessage = () => {
     if (!input.trim()) return;
-
     const newMsg: Message = {
       id: Date.now().toString(),
       text: input,
       fromUser: true,
     };
-
     setMessages((m) => [newMsg, ...m]);
     setInput("");
     Keyboard.dismiss();
@@ -122,13 +98,11 @@ export default function ChatScreen() {
       );
       return;
     }
-
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       quality: 0.8,
     });
-
     if (!result.canceled && result.assets?.length > 0) {
       const newMsg: Message = {
         id: Date.now().toString(),
@@ -136,7 +110,6 @@ export default function ChatScreen() {
         fromUser: true,
       };
       setMessages((m) => [newMsg, ...m]);
-      if (!firstMessageSent) setFirstMessageSent(true);
     }
   };
 
@@ -146,18 +119,21 @@ export default function ChatScreen() {
       Alert.alert("Permission Denied", "Camera access is required to take photos.");
       return;
     }
+    
+    // ✅ CORRECTED: Changed ImageCheck to ImagePicker
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       quality: 0.7,
     });
-    if (!result.canceled) {
+    
+    // ✅ CORRECTED: Added check for assets array
+    if (!result.canceled && result.assets?.length > 0) {
       const newMsg: Message = {
         id: Date.now().toString(),
         imageUri: result.assets[0].uri,
         fromUser: true,
       };
       setMessages((m) => [newMsg, ...m]);
-      if (!firstMessageSent) setFirstMessageSent(true);
     }
   };
 
@@ -178,50 +154,63 @@ export default function ChatScreen() {
     </View>
   );
 
+  // This component now simply renders the animated logo
+  // if the message list is empty.
+  const renderEmptyComponent = () => {
+    // Only show if there are no messages
+    if (messages.length > 0) return null;
+
+    return (
+      <View style={styles.emptyContainer}>
+        <View style={styles.centerWrapper} pointerEvents="box-none">
+          <Animated.View
+            style={[
+              styles.pulse,
+              {
+                transform: [{ scale: pulseScale }],
+                opacity: pulseOpacity,
+              },
+            ]}
+          />
+          <Animated.View style={{ transform: [{ scale: centerScale }] }}>
+            <TouchableOpacity
+              onPress={handleCenterPress}
+              style={styles.centerBtn}
+            >
+              <FontAwesome5 name="plus" size={36} color="#000" />
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <TopBar />
 
+      {/* Touchable for *tapping* to dismiss */}
       <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
           <View style={styles.container}>
-            {!firstMessageSent && messages.length === 0 && (
-              <View style={styles.centerWrapper} pointerEvents="box-none">
-                <Animated.View
-                  style={[
-                    styles.pulse,
-                    {
-                      transform: [{ scale: pulseScale }],
-                      opacity: pulseOpacity,
-                    },
-                  ]}
-                />
-                <Animated.View style={{ transform: [{ scale: centerScale }] }}>
-                  <TouchableOpacity
-                    onPress={handleCenterPress}
-                    style={styles.centerBtn}
-                  >
-                    <FontAwesome5 name="plus" size={36} color="#000" />
-                  </TouchableOpacity>
-                </Animated.View>
-              </View>
-            )}
-
             <FlatList
               inverted
               data={messages}
               keyExtractor={(item) => item.id}
               renderItem={renderMessage}
               contentContainerStyle={styles.listContent}
+              ListEmptyComponent={renderEmptyComponent}
+              style={{ flex: 1 }}
+              keyboardShouldPersistTaps="handled"
+              // Prop for *swiping* to dismiss
+              keyboardDismissMode="on-drag"
             />
 
-            <Animated.View
-              style={[styles.bottomWrapper, { marginBottom: keyboardOffset }]}
-            >
+            <View style={styles.bottomWrapper}>
               <View style={styles.inputRow}>
                 <TouchableOpacity style={styles.iconBtn} onPress={takePhoto}>
                   <Ionicons name="camera-outline" size={22} color="#444" />
@@ -243,19 +232,23 @@ export default function ChatScreen() {
                 <TouchableOpacity
                   style={[
                     styles.sendBtn,
-                    !input.trim() && styles.sendBtnDisabled,
+                    !input.trim() ? styles.sendBtnDisabled : styles.sendBtnEnabled,
                   ]}
                   onPress={sendMessage}
                   disabled={!input.trim()}
                 >
-                  <Ionicons name="send" size={20} color="#fff" />
+                  <Ionicons 
+                    name="arrow-up"
+                    size={20} 
+                    color="#fff" 
+                  />
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.iconBtn}>
                   <Ionicons name="mic-outline" size={22} color="#444" />
                 </TouchableOpacity>
               </View>
-            </Animated.View>
+            </View>
           </View>
         </KeyboardAvoidingView>
       </TouchableWithoutFeedback>
@@ -296,7 +289,16 @@ const styles = StyleSheet.create({
   title: { fontSize: 16, fontWeight: "600", color: "#222" },
   avatar: { width: 40, height: 40, borderRadius: 20 },
   container: { flex: 1 },
-  listContent: { padding: 16, flexGrow: 1 },
+  listContent: { 
+    padding: 16, 
+    flexGrow: 1, // Ensures empty component can center
+  },
+  emptyContainer: {
+    flex: 1, // Takes up available space
+    justifyContent: "center",
+    alignItems: "center",
+    transform: [{ scaleY: -1 }] // Flips for inverted list
+  },
   message: {
     marginVertical: 6,
     padding: 12,
@@ -304,12 +306,12 @@ const styles = StyleSheet.create({
     maxWidth: "80%",
   },
   userMsg: { 
-    backgroundColor: "#E8E8E8",  // ✅ pastel grey
+    backgroundColor: "#000",
     alignSelf: "flex-end" 
   },
   botMsg: { backgroundColor: "#F5F5F7", alignSelf: "flex-start" },
   userText: { 
-    color: "#000",  // ✅ black text
+    color: "#fff",
     fontSize: 15 
   },
   botText: { color: "#333", fontSize: 15 },
@@ -320,9 +322,6 @@ const styles = StyleSheet.create({
     resizeMode: "cover",
   },
   centerWrapper: {
-    position: "absolute",
-    top: WINDOW.height * 0.4,
-    left: (WINDOW.width - 64) / 2,
     width: 64,
     height: 64,
     alignItems: "center",
@@ -349,20 +348,16 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    paddingBottom: Platform.OS === "ios" ? 12 : 8,
+    paddingBottom: Platform.OS === "ios" ? 24 : 8, // Using your 24px padding
     backgroundColor: "#fff",
   },
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
     marginHorizontal: 12,
-    backgroundColor: "#fff",
-    padding: 12,
+    backgroundColor: "#F5F5F7",
+    padding: 6,
     borderRadius: 25,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 4,
   },
   iconBtn: { paddingHorizontal: 6, paddingVertical: 6 },
   input: {
@@ -371,15 +366,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#111",
     paddingHorizontal: 6,
+    paddingVertical: 8,
   },
   sendBtn: {
     height: 38,
     minWidth: 38,
     borderRadius: 20,
-    backgroundColor: "#000",
     alignItems: "center",
     justifyContent: "center",
     marginHorizontal: 4,
   },
-  sendBtnDisabled: { backgroundColor: "#000" },
+  sendBtnEnabled: {
+    backgroundColor: "#000",
+  },
+  sendBtnDisabled: { 
+    backgroundColor: "#BDBDBD",
+  },
 });
