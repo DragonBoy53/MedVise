@@ -1,8 +1,9 @@
 import { useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
-  Dimensions, // Added Dimensions
+  Dimensions,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -13,222 +14,189 @@ import {
   View,
 } from "react-native";
 
-// Added height from Dimensions
+// Import your new API client
+import apiClient from "../api/client"; // Adjust path if needed
+
 const { height } = Dimensions.get("window");
 
 export default function SignupScreen() {
   const router = useRouter();
 
-  // --- Animation refs and state from LoginScreen ---
+  // --- Animation refs ---
   const [displayText, setDisplayText] = useState("");
-  const textOpacity = useRef(new Animated.Value(1)).current; // Text is always visible
-  const dotOpacity = useRef(new Animated.Value(1)).current; // Dot will be animated
+  const textOpacity = useRef(new Animated.Value(1)).current;
+  const dotOpacity = useRef(new Animated.Value(1)).current;
   const cardSlide = useRef(new Animated.Value(height)).current;
   const contentTranslateY = useRef(new Animated.Value(0)).current;
 
-  // The "blink" (fade in and out) animation
+  // --- Form State ---
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState<"user" | "admin">("user");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // --- Animation Logic (Unchanged) ---
   const blinkAnimation = useRef(
     Animated.loop(
       Animated.sequence([
-        Animated.timing(dotOpacity, {
-          toValue: 0,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(dotOpacity, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
+        Animated.timing(dotOpacity, { toValue: 0, duration: 800, useNativeDriver: true }),
+        Animated.timing(dotOpacity, { toValue: 1, duration: 800, useNativeDriver: true }),
       ])
     )
   ).current;
-  // --- End of LoginScreen refs ---
 
-  // This state is unique to SignupScreen
-  const [role, setRole] = useState<"user" | "admin">("user");
-
-  // --- Helper functions from LoginScreen ---
-  const startBlinking = () => {
-    blinkAnimation.start();
-  };
-
-  const stopBlinking = () => {
-    blinkAnimation.stop();
-    dotOpacity.setValue(1);
-  };
-  
+  const startBlinking = () => blinkAnimation.start();
+  const stopBlinking = () => { blinkAnimation.stop(); dotOpacity.setValue(1); };
   const wait = (ms: number) => new Promise((res) => setTimeout(res, ms));
-  // --- End of helper functions ---
 
-
-  // Replaced original useEffect with LoginScreen's logic
   useEffect(() => {
     startAnimation();
-    // Clean up the animation on unmount
     return () => blinkAnimation.stop();
   }, []);
 
-  // --- Animation functions from LoginScreen ---
   const startAnimation = async () => {
-    // Start the text loop immediately
     loopText();
-
-    // Wait for the animation to get going
     await wait(1200);
-
-    // Animate the content block sliding UP and the card sliding IN
     Animated.parallel([
-      Animated.spring(contentTranslateY, {
-        toValue: -120, // Moves the dot/text block up
-        useNativeDriver: true,
-        friction: 7,
-        tension: 60,
-      }),
-      Animated.spring(cardSlide, {
-        toValue: 0, // Moves the login card up
-        useNativeDriver: true,
-        friction: 7,
-        tension: 60,
-      }),
+      Animated.spring(contentTranslateY, { toValue: -120, useNativeDriver: true, friction: 7, tension: 60 }),
+      Animated.spring(cardSlide, { toValue: 0, useNativeDriver: true, friction: 7, tension: 60 }),
     ]).start();
   };
 
-  // This loop now controls the blinking cursor
   const loopText = async () => {
     const texts = ["MedVise", "Let's Classify", "Let's Go"];
-    const typeSpeed = 100; // Milliseconds between letters
-    const deleteSpeed = 50; // Faster deleting
-    const pauseTime = 1500; // How long to show the full word
-
+    const typeSpeed = 100, deleteSpeed = 50, pauseTime = 1500;
     let i = 0;
     while (true) {
       const currentText = texts[i];
-      
-      stopBlinking(); // Stop blinking to type
+      stopBlinking();
       for (let j = 0; j < currentText.length; j++) {
         setDisplayText(currentText.substring(0, j + 1));
         await wait(typeSpeed);
       }
-
-      startBlinking(); // Start blinking on pause
-      await wait(pauseTime);
-
-      stopBlinking(); // Stop blinking to delete
+      startBlinking(); await wait(pauseTime);
+      stopBlinking();
       for (let j = currentText.length; j > 0; j--) {
         setDisplayText(currentText.substring(0, j - 1));
         await wait(deleteSpeed);
       }
-
-      startBlinking(); // Start blinking when empty
-      await wait(300);
-
+      startBlinking(); await wait(300);
       i = (i + 1) % texts.length;
     }
   };
-  // --- End of animation functions ---
+  // --- End of Animation Logic ---
+
+
+  // ✅ --- NEW: Handle Sign Up Function ---
+  const handleSignUp = async () => {
+    if (!fullName || !email || !password) {
+      setError("Please fill in all fields.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Send data to your /api/register endpoint
+      const response = await apiClient.post("/api/register", {
+        fullName,
+        email,
+        password,
+        role,
+      });
+
+      // Handle success
+      setLoading(false);
+      Alert.alert(
+        "Success",
+        "Registration successful! Please log in.",
+        [{ text: "OK", onPress: () => router.push("/login") }]
+      );
+
+    } catch (err: any) {
+      // Handle error
+      setLoading(false);
+      if (err.response) {
+        // Server responded with a status code (e.g., 400, 500)
+        setError(err.response.data.message);
+      } else if (err.request) {
+        // Request was made but no response received
+        setError("Network error. Could not connect to server.");
+      } else {
+        // Something else happened
+        setError("An unknown error occurred.");
+      }
+    }
+  };
 
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: "#000" }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      {/* Container style updated to match LoginScreen */}
       <View style={styles.container}>
-  
-        {/* Replaced static title with animated component from LoginScreen */}
-        <Animated.View 
-          style={[
-            styles.centerArea, 
-            { transform: [{ translateY: contentTranslateY }] }
-          ]}
-        >
-          <Animated.Text
-            style={[
-              styles.titleText,
-              { 
-                opacity: textOpacity,
-                color: "#fff",
-              },
-            ]}
-          >
+        {/* Animated Title Area (Unchanged) */}
+        <Animated.View style={[ styles.centerArea, { transform: [{ translateY: contentTranslateY }] } ]}>
+          <Animated.Text style={[ styles.titleText, { opacity: textOpacity, color: "#fff" } ]}>
             {displayText}
           </Animated.Text>
-          
-          <Animated.View style={[
-            styles.dot, 
-            { 
-              opacity: dotOpacity,
-            }
-          ]} />
+          <Animated.View style={[ styles.dot, { opacity: dotOpacity } ]} />
         </Animated.View>
-
-       
-        {/* Updated Animated.View to use cardSlide from LoginScreen */}
-        <Animated.View
-          style={[
-            styles.cardContainer,
-            {
-              transform: [{ translateY: cardSlide }],
-            },
-          ]}
-        >
-          {/* The content of the signup form remains unchanged */}
+        
+        {/* Sign Up Card */}
+        <Animated.View style={[ styles.cardContainer, { transform: [{ translateY: cardSlide }] } ]}>
           <ScrollView
             contentContainerStyle={styles.scrollInner}
             keyboardShouldPersistTaps="handled"
           >
             <Text style={styles.cardTitle}>Sign Up</Text>
 
+            {/* ✅ NEW: Display error message */}
+            {error && <Text style={styles.errorText}>{error}</Text>}
+
             <TextInput
               placeholder="Full Name"
               placeholderTextColor="#aaa"
               style={styles.input}
+              value={fullName} // ✅ Bind to state
+              onChangeText={setFullName} // ✅ Update state
             />
             <TextInput
               placeholder="Email"
               placeholderTextColor="#aaa"
               style={styles.input}
               keyboardType="email-address"
+              autoCapitalize="none"
+              value={email} // ✅ Bind to state
+              onChangeText={setEmail} // ✅ Update state
             />
             <TextInput
               placeholder="Password"
               placeholderTextColor="#aaa"
               style={styles.input}
               secureTextEntry
+              value={password} // ✅ Bind to state
+              onChangeText={setPassword} // ✅ Update state
             />
 
             <Text style={styles.roleLabel}>Sign up as:</Text>
             <View style={styles.roleRow}>
+              {/* Role selection (Unchanged) */}
               <TouchableOpacity
-                style={[
-                  styles.roleOption,
-                  role === "user" && styles.roleSelected,
-                ]}
+                style={[ styles.roleOption, role === "user" && styles.roleSelected ]}
                 onPress={() => setRole("user")}
               >
-                <Text
-                  style={[
-                    styles.roleText,
-                    role === "user" && styles.roleTextSelected,
-                  ]}
-                >
+                <Text style={[ styles.roleText, role === "user" && styles.roleTextSelected ]}>
                   User
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[
-                  styles.roleOption,
-                  role === "admin" && styles.roleSelected,
-                ]}
+                style={[ styles.roleOption, role === "admin" && styles.roleSelected ]}
                 onPress={() => setRole("admin")}
               >
-                <Text
-                  style={[
-                    styles.roleText,
-                    role === "admin" && styles.roleTextSelected,
-                  ]}
-                >
+                <Text style={[ styles.roleText, role === "admin" && styles.roleTextSelected ]}>
                   Admin
                 </Text>
               </TouchableOpacity>
@@ -236,9 +204,12 @@ export default function SignupScreen() {
 
             <TouchableOpacity
               style={styles.signupBtn}
-              onPress={() => router.push("/login")}
+              onPress={handleSignUp} // ✅ Call handleSignUp
+              disabled={loading} // ✅ Disable button when loading
             >
-              <Text style={styles.signupText}>Sign Up</Text>
+              <Text style={styles.signupText}>
+                {loading ? "Signing Up..." : "Sign Up"}
+              </Text>
             </TouchableOpacity>
 
             <View style={styles.loginRow}>
@@ -255,107 +226,34 @@ export default function SignupScreen() {
 }
 
 const styles = StyleSheet.create({
-  // Style updated to match LoginScreen
-  container: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  
-  // Removed appTitle style
-  
-  // Added centerArea, dot, and titleText from LoginScreen
-  centerArea: {
-    position: "absolute",
-    top: "35%", 
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#fff",
-    marginLeft: 12,
-  },
-  titleText: {
-    fontSize: 30,
-    fontWeight: "700",
-  },
-
-  // Card container updated to use absolute positioning
-  cardContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "#111",
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
-    padding: 20,
-    height: 500, // Kept 500 height for the longer signup form
-    width: "100%",
-    shadowColor: "#000",
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  
-  // --- All styles below this line are unchanged ---
-  scrollInner: { flexGrow: 1 },
-  cardTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    marginBottom: 20,
+  // ... (All your existing styles) ...
+  // ✅ NEW: Add an error style
+  errorText: {
+    color: "#E53E3E", // A red color
     textAlign: "center",
-    color: "#fff",
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#555",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 15,
-    color: "#fff",
-  },
-  roleLabel: {
-    fontSize: 16,
-    color: "#aaa",
-    marginBottom: 8,
+    marginBottom: 10,
+    fontSize: 14,
     fontWeight: "600",
   },
-  roleRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 20,
-  },
-  roleOption: {
-    borderWidth: 1,
-    borderColor: "#555",
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 30,
-  },
-  roleSelected: {
-    backgroundColor: "#007AFF",
-    borderColor: "#007AFF",
-  },
+  
+  // (Your other styles)
+  container: { flex: 1, backgroundColor: "#000" },
+  centerArea: { position: "absolute", top: "35%", left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  dot: { width: 12, height: 12, borderRadius: 6, backgroundColor: "#fff", marginLeft: 12 },
+  titleText: { fontSize: 30, fontWeight: "700" },
+  cardContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: "#111", borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 20, height: 500, width: "100%", shadowColor: "#000", shadowOpacity: 0.4, shadowRadius: 10, elevation: 6 },
+  scrollInner: { flexGrow: 1 },
+  cardTitle: { fontSize: 24, fontWeight: "700", marginBottom: 20, textAlign: "center", color: "#fff" },
+  input: { borderWidth: 1, borderColor: "#555", borderRadius: 8, padding: 12, marginBottom: 15, color: "#fff" },
+  roleLabel: { fontSize: 16, color: "#aaa", marginBottom: 8, fontWeight: "600" },
+  roleRow: { flexDirection: "row", justifyContent: "space-around", marginBottom: 20 },
+  roleOption: { borderWidth: 1, borderColor: "#555", borderRadius: 8, paddingVertical: 10, paddingHorizontal: 30 },
+  roleSelected: { backgroundColor: "#007AFF", borderColor: "#007AFF" },
   roleText: { color: "#aaa", fontWeight: "600" },
   roleTextSelected: { color: "#fff" },
-  signupBtn: {
-    backgroundColor: "#4A90E2",
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    marginBottom: 15,
-  },
+  signupBtn: { backgroundColor: "#4A90E2", paddingVertical: 12, borderRadius: 8, alignItems: "center", marginBottom: 15 },
   signupText: { color: "#fff", fontWeight: "600" },
-  loginRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-  },
+  loginRow: { flexDirection: "row", justifyContent: "center" },
   loginPrompt: { color: "#aaa" },
   loginLink: { color: "#4A90E2", fontWeight: "600" },
 });
