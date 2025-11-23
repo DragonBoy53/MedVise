@@ -17,8 +17,8 @@ export default function RootLayout() {
         {/* This is the group for your tab bar. 
           It's still here if you need it. 
         */}
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        
+        {/* <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+         */}
         {/* ✅ ADDED: This registers your app/chat.tsx file.
           Now router.push('/chat') from your login screen will work.
         */}
