@@ -8,6 +8,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+// ✅ Import API Client
+import apiClient from "../api/client";
+
 type Message = {
   id: string;
   text?: string;
@@ -77,16 +80,45 @@ export default function ChatScreen() {
     ]).start();
   };
 
-  const sendMessage = () => {
+  // ✅ UPDATED: Send Message Function connected to Backend
+  const sendMessage = async () => {
     if (!input.trim()) return;
-    const newMsg: Message = {
+
+    // 1. Optimistic UI: Add user message immediately
+    const userMsg: Message = {
       id: Date.now().toString(),
       text: input,
       fromUser: true,
     };
-    setMessages((m) => [newMsg, ...m]);
+    
+    // Update local state immediately
+    setMessages((prevMessages) => [userMsg, ...prevMessages]);
+    
+    // Store input in a temp variable and clear the box
+    const messageToSend = input;
     setInput("");
     Keyboard.dismiss();
+
+    try {
+      // 2. Call the Backend
+      const response = await apiClient.post("/api/chat", {
+        message: messageToSend,
+        history: [], // Expand this later if you want context
+      });
+
+      // 3. Add Bot Response to UI
+      const botMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        text: response.data.reply, // Matches backend: res.json({ reply: ... })
+        fromUser: false,
+      };
+
+      setMessages((prevMessages) => [botMsg, ...prevMessages]);
+
+    } catch (error) {
+      console.error("Chat Error:", error);
+      Alert.alert("Error", "Could not connect to MedVise AI.");
+    }
   };
 
   const pickImage = async () => {
@@ -120,13 +152,11 @@ export default function ChatScreen() {
       return;
     }
     
-    // ✅ CORRECTED: Changed ImageCheck to ImagePicker
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       quality: 0.7,
     });
     
-    // ✅ CORRECTED: Added check for assets array
     if (!result.canceled && result.assets?.length > 0) {
       const newMsg: Message = {
         id: Date.now().toString(),
@@ -154,10 +184,7 @@ export default function ChatScreen() {
     </View>
   );
 
-  // This component now simply renders the animated logo
-  // if the message list is empty.
   const renderEmptyComponent = () => {
-    // Only show if there are no messages
     if (messages.length > 0) return null;
 
     return (
@@ -190,7 +217,6 @@ export default function ChatScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <TopBar />
 
-      {/* Touchable for *tapping* to dismiss */}
       <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
@@ -206,7 +232,6 @@ export default function ChatScreen() {
               ListEmptyComponent={renderEmptyComponent}
               style={{ flex: 1 }}
               keyboardShouldPersistTaps="handled"
-              // Prop for *swiping* to dismiss
               keyboardDismissMode="on-drag"
             />
 
@@ -291,13 +316,13 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   listContent: { 
     padding: 16, 
-    flexGrow: 1, // Ensures empty component can center
+    flexGrow: 1,
   },
   emptyContainer: {
-    flex: 1, // Takes up available space
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    transform: [{ scaleY: -1 }] // Flips for inverted list
+    transform: [{ scaleY: -1 }] 
   },
   message: {
     marginVertical: 6,
@@ -348,7 +373,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    paddingBottom: Platform.OS === "ios" ? 24 : 8, // Using your 24px padding
+    paddingBottom: Platform.OS === "ios" ? 24 : 8,
     backgroundColor: "#fff",
   },
   inputRow: {

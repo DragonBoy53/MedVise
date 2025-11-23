@@ -1,117 +1,113 @@
-
-require("dotenv").config(); 
+require("dotenv").config();
 const express = require("express");
-const { Pool } = require("pg"); 
-const bcrypt = require("bcryptjs"); 
-const jwt = require("jsonwebtoken"); 
-const cors = require("cors"); 
+const { Pool } = require("pg");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const cors = require("cors");
+const { GoogleGenAI } = require("@google/genai");
 
 const app = express();
-const PORT = process.env.PORT || 3001; 
+const PORT = process.env.PORT || 3001;
 
+// Middleware
+app.use(cors());
+app.use(express.json());
 
-app.use(cors()); 
-app.use(express.json()); 
-
-
+// Database Connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
+// Initialize Google AI with the New SDK
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
+// --- ROUTES ---
+
+// 1. Register
 app.post("/api/register", async (req, res) => {
   try {
     const { fullName, email, password, role } = req.body;
+    if (!fullName || !email || !password || !role) return res.status(400).json({ message: "All fields required" });
 
+    const userExists = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+    if (userExists.rows.length > 0) return res.status(400).json({ message: "Email already in use" });
 
-    if (!fullName || !email || !password || !role) {
-      return res.status(400).json({ message: "Please provide all fields." });
-    }
-
-
-    const userExists = await pool.query("SELECT * FROM users WHERE email = $1", [
-      email,
-    ]);
-    if (userExists.rows.length > 0) {
-      return res.status(400).json({ message: "Email already in use." });
-    }
-
-   
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-  
     const newUser = await pool.query(
       "INSERT INTO users (fullName, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, email, role",
       [fullName, email, passwordHash, role]
     );
 
- 
-    res
-      .status(201)
-      .json({
-        message: "User registered successfully!",
-        user: newUser.rows[0],
-      });
+    res.status(201).json({ message: "User registered!", user: newUser.rows[0] });
   } catch (err) {
-    console.error(err.message);
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 });
 
-
+// 2. Login
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ message: "Missing credentials" });
 
- 
-    if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Please provide email and password." });
-    }
-
-  
-    const user = await pool.query("SELECT * FROM users WHERE email = $1", [
-      email,
-    ]);
-    if (user.rows.length === 0) {
-      return res.status(400).json({ message: "Invalid credentials." });
-    }
+    const user = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+    if (user.rows.length === 0) return res.status(400).json({ message: "Invalid credentials" });
 
     const dbUser = user.rows[0];
-
-
     const isMatch = await bcrypt.compare(password, dbUser.password_hash);
-    if (!isMatch) {
-      return res.status(400).json({ message: "Invalid credentials." });
-    }
-
+    if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
 
     const token = jwt.sign(
-      {
-        id: dbUser.id,
-        email: dbUser.email,
-        role: dbUser.role,
-      },
+      { id: dbUser.id, email: dbUser.email, role: dbUser.role },
       process.env.JWT_SECRET,
-      { expiresIn: "1d" } 
+      { expiresIn: "1d" }
     );
 
- 
     res.status(200).json({
       message: "Login successful!",
       token: token,
-      user: {
-        id: dbUser.id,
-        email: dbUser.email,
-        fullName: dbUser.fullname,
-        role: dbUser.role,
-      },
+      user: { id: dbUser.id, email: dbUser.email, fullName: dbUser.fullname, role: dbUser.role },
     });
   } catch (err) {
-    console.error(err.message);
+    console.error(err);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+// 3. Chat Route (Fixed for New SDK)
+app.post("/api/chat", async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ message: "Message required" });
+
+    // We force "gemini-1.5-flash" because it is the standard free model.
+    // If this fails, try "gemini-pro"
+    const modelName = "gemini-2.5-flash";
+
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: message }]
+        }
+      ],
+    });
+
+    // Safely extract text
+    const responseText = response.text || "I am unable to answer that right now.";
+    
+    res.json({ reply: responseText });
+
+  } catch (error) {
+    console.error("Gemini API Error:", error);
+    res.status(500).json({ 
+      message: "AI Service Unavailable", 
+      details: error.message 
+    });
   }
 });
 
