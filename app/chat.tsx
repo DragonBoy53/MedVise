@@ -1,12 +1,17 @@
 import { FontAwesome5, Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+// ✅ FIX 1: Use namespace import for React to satisfy TypeScript
 import {
   Alert, Animated, Dimensions, Easing, FlatList, Image,
   Keyboard, KeyboardAvoidingView, Platform, StatusBar,
   StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+// ✅ FIX 2: Ignore the missing type definition for the JS file
+// @ts-ignore
+import apiClient from "../api/client";
 
 type Message = {
   id: string;
@@ -77,16 +82,86 @@ export default function ChatScreen() {
     ]).start();
   };
 
-  const sendMessage = () => {
-    if (!input.trim()) return;
+  const sendImageToBackend = async (uri: string) => {
+    // 1. Show image in chat immediately
     const newMsg: Message = {
       id: Date.now().toString(),
-      text: input,
+      imageUri: uri,
+      fromUser: true,
+    };
+    setMessages((m) => [newMsg, ...m]);
+
+    try {
+      // 2. Prepare the file for upload
+      const formData = new FormData();
+      const filename = uri.split('/').pop();
+      const match = /\.(\w+)$/.exec(filename || "");
+      const type = match ? `image/${match[1]}` : `image`;
+
+      // @ts-ignore: React Native FormData expects an object
+      formData.append("image", { uri, name: filename, type });
+      formData.append("message", "Analyze this image/report.");
+
+      // 3. Send to Backend
+      const response = await apiClient.post("/api/chat", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      // 4. Show AI Response
+      const botMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        text: response.data.reply,
+        fromUser: false,
+      };
+      setMessages((m) => [botMsg, ...m]);
+
+    } catch (error: any) {
+      console.error("Image Upload Error:", error);
+      Alert.alert("Error", "Failed to analyze image.");
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!input.trim()) return;
+    const currentInput = input;
+
+    const newMsg: Message = {
+      id: Date.now().toString(),
+      text: currentInput,
       fromUser: true,
     };
     setMessages((m) => [newMsg, ...m]);
     setInput("");
     Keyboard.dismiss();
+
+
+    try {
+      console.log("Attempting to send to:", "/api/chat"); // 1. Log attempt
+
+      const formData = new FormData();
+      formData.append("message", currentInput);
+
+      const response = await apiClient.post("/api/chat", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      console.log("Success! Backend replied:", response.data); // 2. Log success
+
+      const botMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        text: response.data.reply,
+        fromUser: false,
+      };
+      setMessages((m) => [botMsg, ...m]);
+
+    } catch (error: any) {
+      // 3. Log the EXACT error
+      console.error("Chat Error Details:", error); 
+      if (error.response) {
+          console.error("Server Responded with:", error.response.status, error.response.data);
+      }
+      Alert.alert("Error", "Could not connect to MedVise AI.");
+    }
   };
 
   const pickImage = async () => {
@@ -104,12 +179,7 @@ export default function ChatScreen() {
       quality: 0.8,
     });
     if (!result.canceled && result.assets?.length > 0) {
-      const newMsg: Message = {
-        id: Date.now().toString(),
-        imageUri: result.assets[0].uri,
-        fromUser: true,
-      };
-      setMessages((m) => [newMsg, ...m]);
+        sendImageToBackend(result.assets[0].uri);
     }
   };
 
@@ -128,12 +198,7 @@ export default function ChatScreen() {
     
     // ✅ CORRECTED: Added check for assets array
     if (!result.canceled && result.assets?.length > 0) {
-      const newMsg: Message = {
-        id: Date.now().toString(),
-        imageUri: result.assets[0].uri,
-        fromUser: true,
-      };
-      setMessages((m) => [newMsg, ...m]);
+        sendImageToBackend(result.assets[0].uri);
     }
   };
 
