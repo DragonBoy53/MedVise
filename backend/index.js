@@ -4,6 +4,8 @@ const { Pool } = require("pg");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
+const multer = require("multer"); // ✅ Added for file uploads
+const fs = require("fs");         // ✅ Added for file reading
 const { GoogleGenAI } = require("@google/genai");
 
 const app = express();
@@ -20,8 +22,12 @@ const pool = new Pool({
     rejectUnauthorized: false, // Required for Neon/Vercel Postgres
   },
 });
-// Initialize Google AI with the New SDK
+
+// Initialize Google AI
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+// Configure Multer for temp storage (Required for Vercel/Serverless)
+const upload = multer({ dest: "/tmp" }); // ✅ Use /tmp for serverless environments
 
 // --- ROUTES ---
 
@@ -79,29 +85,56 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// 3. Chat Route (Fixed for New SDK)
-app.post("/api/chat", async (req, res) => {
+// 3. Chat Route (Fixed for Images + Text)
+// ✅ Added upload.single("image") middleware
+app.post("/api/chat", upload.single("image"), async (req, res) => {
   try {
-    const { message } = req.body;
-    if (!message) return res.status(400).json({ message: "Message required" });
+    // When using multer, text fields are in req.body, files in req.file
+    const message = req.body.message || ""; 
+    const file = req.file;
 
-    // We force "gemini-1.5-flash" because it is the standard free model.
-    // If this fails, try "gemini-pro"
-    const modelName = "gemini-2.5-flash";
+    // ✅ FIXED: Use the standard model name
+    const modelName = "gemini-2.5-flash"; 
+
+    let promptParts = [];
+
+    // Add text if present
+    if (message) {
+      promptParts.push({ text: message });
+    } else {
+      promptParts.push({ text: "Analyze this image/report." });
+    }
+
+    // Add image if present
+    if (file) {
+      const imageBuffer = fs.readFileSync(file.path);
+      const imageBase64 = imageBuffer.toString("base64");
+      
+      promptParts.push({
+        inlineData: {
+          mimeType: file.mimetype,
+          data: imageBase64
+        }
+      });
+    }
 
     const response = await ai.models.generateContent({
       model: modelName,
       contents: [
         {
           role: "user",
-          parts: [{ text: message }]
+          parts: promptParts
         }
       ],
     });
 
-    // Safely extract text
-    const responseText = response.text || "I am unable to answer that right now.";
+    const responseText = response.text || "No response generated.";
     
+    // Cleanup temp file
+    if (file) {
+      try { fs.unlinkSync(file.path); } catch (e) { /* ignore cleanup error */ }
+    }
+
     res.json({ reply: responseText });
 
   } catch (error) {
