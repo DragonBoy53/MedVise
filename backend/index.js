@@ -4,9 +4,9 @@ const { Pool } = require("pg");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
-const multer = require("multer"); // ✅ Added for file uploads
-const fs = require("fs");         // ✅ Added for file reading
-const { GoogleGenAI } = require("@google/genai");
+const multer = require("multer"); 
+const fs = require("fs");         
+const { GoogleGenAI } = require("@google/genai"); // Ensure you have installed @google/genai
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -19,15 +19,16 @@ app.use(express.json());
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: false, // Required for Neon/Vercel Postgres
+    rejectUnauthorized: false, 
   },
 });
 
 // Initialize Google AI
+// Note: Depending on your exact SDK version, this initialization matches the new @google/genai lib
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// Configure Multer for temp storage (Required for Vercel/Serverless)
-const upload = multer({ dest: "/tmp" }); // ✅ Use /tmp for serverless environments
+// Configure Multer for temp storage
+const upload = multer({ dest: "/tmp" }); 
 
 // --- ROUTES ---
 
@@ -85,60 +86,65 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// 3. Chat Route (Fixed for Images + Text)
-// ✅ Added upload.single("image") middleware
+// 3. Chat Route (Updated to use your specific Image Understanding Logic)
 app.post("/api/chat", upload.single("image"), async (req, res) => {
   try {
-    // When using multer, text fields are in req.body, files in req.file
     const message = req.body.message || ""; 
     const file = req.file;
-
-    // ✅ FIXED: Use the standard model name
     const modelName = "gemini-2.5-flash"; 
 
-    let promptParts = [];
+    // Initialize the contents array
+    let contents = [];
 
-    // Add text if present
-    if (message) {
-      promptParts.push({ text: message });
-    } else {
-      promptParts.push({ text: "Analyze this image/report." });
-    }
-
-    // Add image if present
+    // 1. Handle Image (Prioritize adding image data first if it exists)
     if (file) {
       const imageBuffer = fs.readFileSync(file.path);
       const imageBase64 = imageBuffer.toString("base64");
       
-      promptParts.push({
+      // Pushing the image object exactly as your snippet requires
+      contents.push({
         inlineData: {
-          mimeType: file.mimetype,
-          data: imageBase64
-        }
+          mimeType: file.mimetype, // e.g., 'image/jpeg'
+          data: imageBase64,
+        },
       });
     }
 
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: [
-        {
-          role: "user",
-          parts: promptParts
-        }
-      ],
+    // 2. Handle Text (Push text object to the same array)
+    // If no message is provided but an image is, we provide a default prompt
+    const promptText = message || (file ? "Analyze this image." : "Hello");
+    
+    contents.push({ 
+        text: promptText 
     });
 
-    const responseText = response.text || "No response generated.";
-    
-    // Cleanup temp file
+    // 3. Generate Content
+    // Passing the simple flat 'contents' array as seen in your sample code
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: contents,
+    });
+
+    // Depending on the exact version of @google/genai, response.text might be a property or a function.
+    // Based on your snippet "console.log(response.text)", we use the property access.
+    // If you get undefined, try response.text()
+    const replyText = response.text || "No response text found.";
+
+    // 4. Cleanup Temp File
     if (file) {
-      try { fs.unlinkSync(file.path); } catch (e) { /* ignore cleanup error */ }
+      try { fs.unlinkSync(file.path); } catch (e) { console.error("Cleanup error", e); }
     }
 
-    res.json({ reply: responseText });
+    res.json({ reply: replyText });
 
   } catch (error) {
     console.error("Gemini API Error:", error);
+    
+    // Cleanup on error as well
+    if (req.file) {
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+    }
+
     res.status(500).json({ 
       message: "AI Service Unavailable", 
       details: error.message 
@@ -146,12 +152,10 @@ app.post("/api/chat", upload.single("image"), async (req, res) => {
   }
 });
 
-// Only listen if running locally
 if (require.main === module) {
     app.listen(PORT, () => {
         console.log(`Server running on port ${PORT}`);
     });
 }
 
-// Export for Vercel
 module.exports = app;
