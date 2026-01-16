@@ -1,10 +1,25 @@
 import { FontAwesome5, Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
+import { useAuth, useUser } from "@clerk/clerk-expo";
 import {
-  Alert, Animated, Dimensions, Easing, FlatList, Image,
-  Keyboard, KeyboardAvoidingView, Platform, StatusBar,
-  StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View,
+  Alert,
+  Animated,
+  Dimensions,
+  Easing,
+  FlatList,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -79,61 +94,53 @@ export default function ChatScreen() {
     ]).start();
   };
 
-  // Unified Send Function
   const sendMessage = async () => {
-    // Only return if BOTH input and image are missing
     if (!input.trim() && !selectedImage) return;
 
     const currentInput = input;
     const currentImage = selectedImage;
 
-    // 1. Optimistically update UI
     const newMsg: Message = {
       id: Date.now().toString(),
       text: currentInput,
-      imageUri: currentImage || undefined, // Add image to message if exists
+      imageUri: currentImage || undefined,
       fromUser: true,
     };
 
     setMessages((m) => [newMsg, ...m]);
-    
-    // 2. Clear inputs immediately
+
     setInput("");
-    setSelectedImage(null); 
+    setSelectedImage(null);
     Keyboard.dismiss();
 
     try {
       console.log("Sending message...");
-      
+
       const formData = new FormData();
-      
-      // Append Text
+
       if (currentInput.trim()) {
         formData.append("message", currentInput);
       }
 
-      // Append Image
       if (currentImage) {
-        const filename = currentImage.split('/').pop();
+        const filename = currentImage.split("/").pop();
         const match = /\.(\w+)$/.exec(filename || "");
         const type = match ? `image/${match[1]}` : `image/jpeg`;
-        
+
         // @ts-ignore
         formData.append("image", { uri: currentImage, name: filename, type });
       }
 
       const response = await apiClient.post("/api/chat", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
+        headers: { "Content-Type": "multipart/form-data" },
       });
 
-      // 3. Handle Bot Response
       const botMsg: Message = {
         id: (Date.now() + 1).toString(),
         text: response.data.reply,
         fromUser: false,
       };
       setMessages((m) => [botMsg, ...m]);
-
     } catch (error: any) {
       console.error("Chat Error:", error);
       Alert.alert("Error", "Could not connect to MedVise AI.");
@@ -151,10 +158,9 @@ export default function ChatScreen() {
       allowsEditing: true,
       quality: 0.8,
     });
-    
-    // Update state instead of sending immediately
+
     if (!result.canceled && result.assets?.length > 0) {
-        setSelectedImage(result.assets[0].uri);
+      setSelectedImage(result.assets[0].uri);
     }
   };
 
@@ -168,25 +174,19 @@ export default function ChatScreen() {
       allowsEditing: true,
       quality: 0.7,
     });
-    
-    // Update state instead of sending immediately
+
     if (!result.canceled && result.assets?.length > 0) {
-        setSelectedImage(result.assets[0].uri);
+      setSelectedImage(result.assets[0].uri);
     }
   };
 
   const renderMessage = ({ item }: { item: Message }) => (
     <View
-      style={[
-        styles.message,
-        item.fromUser ? styles.userMsg : styles.botMsg,
-      ]}
+      style={[styles.message, item.fromUser ? styles.userMsg : styles.botMsg]}
     >
-      {/* Show Image first if it exists */}
       {item.imageUri && (
         <Image source={{ uri: item.imageUri }} style={styles.sentImage} />
       )}
-      {/* Show Text if it exists */}
       {item.text ? (
         <Text style={item.fromUser ? styles.userText : styles.botText}>
           {item.text}
@@ -207,7 +207,10 @@ export default function ChatScreen() {
             ]}
           />
           <Animated.View style={{ transform: [{ scale: centerScale }] }}>
-            <TouchableOpacity onPress={handleCenterPress} style={styles.centerBtn}>
+            <TouchableOpacity
+              onPress={handleCenterPress}
+              style={styles.centerBtn}
+            >
               <FontAwesome5 name="plus" size={36} color="#000" />
             </TouchableOpacity>
           </Animated.View>
@@ -240,12 +243,14 @@ export default function ChatScreen() {
             />
 
             <View style={styles.bottomWrapper}>
-              {/* IMAGE PREVIEW SECTION */}
               {selectedImage && (
                 <View style={styles.previewContainer}>
-                  <Image source={{ uri: selectedImage }} style={styles.previewImage} />
-                  <TouchableOpacity 
-                    style={styles.removePreviewBtn} 
+                  <Image
+                    source={{ uri: selectedImage }}
+                    style={styles.previewImage}
+                  />
+                  <TouchableOpacity
+                    style={styles.removePreviewBtn}
                     onPress={() => setSelectedImage(null)}
                   >
                     <Ionicons name="close" size={16} color="#fff" />
@@ -274,9 +279,8 @@ export default function ChatScreen() {
                 <TouchableOpacity
                   style={[
                     styles.sendBtn,
-                    // Enable button if there is text OR an image
-                    (!input.trim() && !selectedImage) 
-                      ? styles.sendBtnDisabled 
+                    !input.trim() && !selectedImage
+                      ? styles.sendBtnDisabled
                       : styles.sendBtnEnabled,
                   ]}
                   onPress={sendMessage}
@@ -298,13 +302,45 @@ export default function ChatScreen() {
 }
 
 function TopBar() {
+  const { user } = useUser();
+  const { signOut } = useAuth();
+  const router = useRouter();
+
+  const handleProfilePress = () => {
+    Alert.alert(
+      "Profile",
+      `Logged in as ${
+        user?.fullName || user?.primaryEmailAddress?.emailAddress
+      }`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Sign Out",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await signOut();
+
+              router.replace("/(auth)/sign-in");
+            } catch (err) {
+              console.error("Sign out error:", err);
+            }
+          },
+        },
+      ]
+    );
+  };
   return (
     <View style={styles.topBar}>
       <View style={{ width: 40 }} />
       <Text style={styles.title}>MedVise</Text>
-      <TouchableOpacity>
+      <TouchableOpacity onPress={handleProfilePress}>
         <Image
-          source={{ uri: "https://api.dicebear.com/7.x/initials/svg?seed=ME" }}
+          source={{
+            uri:
+              user?.imageUrl ||
+              "https://api.dicebear.com/7.x/initials/svg?seed=Guest",
+          }}
           style={styles.avatar}
         />
       </TouchableOpacity>
@@ -326,14 +362,14 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   title: { fontSize: 16, fontWeight: "600", color: "#222" },
-  avatar: { width: 40, height: 40, borderRadius: 20 },
+  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#eee" },
   container: { flex: 1 },
   listContent: { padding: 16, flexGrow: 1 },
   emptyContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    transform: [{ scaleY: -1 }] 
+    transform: [{ scaleY: -1 }],
   },
   message: {
     marginVertical: 6,
@@ -350,25 +386,43 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 10,
     resizeMode: "cover",
-    marginBottom: 5, // space between image and text if both exist
+    marginBottom: 5,
   },
-  centerWrapper: { width: 64, height: 64, alignItems: "center", justifyContent: "center" },
-  pulse: { position: "absolute", width: 64, height: 64, borderRadius: 32, backgroundColor: "#D3D3D3" },
+  centerWrapper: {
+    width: 64,
+    height: 64,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pulse: {
+    position: "absolute",
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#D3D3D3",
+  },
   centerBtn: {
-    width: 60, height: 60, borderRadius: 30, backgroundColor: "#fff",
-    alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#000",
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#000",
   },
   bottomWrapper: {
-    left: 0, right: 0, bottom: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     paddingBottom: Platform.OS === "ios" ? 24 : 8,
     backgroundColor: "#fff",
   },
-  // NEW STYLES FOR IMAGE PREVIEW
   previewContainer: {
     flexDirection: "row",
     paddingHorizontal: 16,
     paddingBottom: 8,
-    alignItems: "flex-end", // aligns the close button nicely
+    alignItems: "flex-end",
   },
   previewImage: {
     width: 80,
@@ -380,7 +434,7 @@ const styles = StyleSheet.create({
   removePreviewBtn: {
     position: "absolute",
     top: -5,
-    left: 85, // Position relative to the image
+    left: 85,
     backgroundColor: "rgba(0,0,0,0.6)",
     borderRadius: 12,
     width: 24,
@@ -398,10 +452,20 @@ const styles = StyleSheet.create({
   },
   iconBtn: { paddingHorizontal: 6, paddingVertical: 6 },
   input: {
-    flex: 1, maxHeight: 100, fontSize: 15, color: "#111", paddingHorizontal: 6, paddingVertical: 8,
+    flex: 1,
+    maxHeight: 100,
+    fontSize: 15,
+    color: "#111",
+    paddingHorizontal: 6,
+    paddingVertical: 8,
   },
   sendBtn: {
-    height: 38, minWidth: 38, borderRadius: 20, alignItems: "center", justifyContent: "center", marginHorizontal: 4,
+    height: 38,
+    minWidth: 38,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: 4,
   },
   sendBtnEnabled: { backgroundColor: "#000" },
   sendBtnDisabled: { backgroundColor: "#BDBDBD" },
