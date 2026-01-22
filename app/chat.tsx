@@ -1,8 +1,8 @@
+import { useAuth, useUser } from "@clerk/clerk-expo";
 import { FontAwesome5, Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { useAuth, useUser } from "@clerk/clerk-expo";
 import {
   Alert,
   Animated,
@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     paddingBottom: Platform.OS === "ios" ? 24 : 8,
-    backgroundColor: "#fff",
+    backgroundColor: "#ffffff00",
   },
   previewContainer: {
     flexDirection: "row",
@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginHorizontal: 12,
-    backgroundColor: "#F5F5F7",
+    backgroundColor: "#f5f5f7",
     padding: 6,
     borderRadius: 25,
   },
