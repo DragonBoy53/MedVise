@@ -126,7 +126,6 @@ export default function ChatScreen() {
         const filename = currentImage.split("/").pop();
         const match = /\.(\w+)$/.exec(filename || "");
         const type = match ? `image/${match[1]}` : `image/jpeg`;
-
         // @ts-ignore
         formData.append("image", { uri: currentImage, name: filename, type });
       }
@@ -154,13 +153,11 @@ export default function ChatScreen() {
         Alert.alert("Permission Required", "We need access to your photos.");
         return;
       }
-
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         quality: 0.8,
       });
-
       if (!result.canceled && result.assets?.length > 0) {
         setSelectedImage(result.assets[0].uri);
       }
@@ -176,12 +173,10 @@ export default function ChatScreen() {
         Alert.alert("Permission Denied", "Camera access is required.");
         return;
       }
-
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
         quality: 0.7,
       });
-
       if (!result.canceled && result.assets?.length > 0) {
         setSelectedImage(result.assets[0].uri);
       }
@@ -191,13 +186,7 @@ export default function ChatScreen() {
   };
 
   const renderMessage = ({ item }: { item: Message }) => (
-    <View
-      style={[
-        styles.message,
-        item.fromUser ? styles.userMsg : styles.botMsg,
-        // Optional: Add specific width logic if needed, but flex-start/end handles it naturally
-      ]}
-    >
+    <View style={[styles.message, item.fromUser ? styles.userMsg : styles.botMsg]}>
       {item.imageUri && (
         <Image source={{ uri: item.imageUri }} style={styles.sentImage} />
       )}
@@ -205,7 +194,6 @@ export default function ChatScreen() {
         <View style={styles.textWrapper}>
           <Markdown
             style={item.fromUser ? userMarkdownStyles : botMarkdownStyles}
-            // Prevent Markdown from collapsing completely or stretching weirdly
             mergeStyle={true}
           >
             {item.text}
@@ -227,10 +215,7 @@ export default function ChatScreen() {
             ]}
           />
           <Animated.View style={{ transform: [{ scale: centerScale }] }}>
-            <TouchableOpacity
-              onPress={handleCenterPress}
-              style={styles.centerBtn}
-            >
+            <TouchableOpacity onPress={handleCenterPress} style={styles.centerBtn}>
               <FontAwesome5 name="plus" size={36} color="#000" />
             </TouchableOpacity>
           </Animated.View>
@@ -263,10 +248,7 @@ export default function ChatScreen() {
           <View style={styles.bottomWrapper}>
             {selectedImage && (
               <View style={styles.previewContainer}>
-                <Image
-                  source={{ uri: selectedImage }}
-                  style={styles.previewImage}
-                />
+                <Image source={{ uri: selectedImage }} style={styles.previewImage} />
                 <TouchableOpacity
                   style={styles.removePreviewBtn}
                   onPress={() => setSelectedImage(null)}
@@ -334,7 +316,6 @@ export default function ChatScreen() {
               style={styles.attachOption}
               onPress={() => {
                 setShowAttachMenu(false);
-                // Slight delay to allow modal to close smoothly before camera opens
                 setTimeout(() => takePhoto(), 300);
               }}
             >
@@ -376,50 +357,223 @@ export default function ChatScreen() {
   );
 }
 
+// ── UserAvatar: shows real photo or initials fallback ────────────────────────
+function UserAvatar({ url, initials, size }: { url: string; initials: string; size: number }) {
+  const [failed, setFailed] = useState(false);
+  const radius = size / 2;
+  // Always try the URL first — only fall back to initials if it actually errors
+  if (url && !failed) {
+    return (
+      <Image
+        source={{ uri: url }}
+        style={{ width: size, height: size, borderRadius: radius, backgroundColor: "#ddd" }}
+        onError={() => {
+          console.log("Avatar load failed for:", url);
+          setFailed(true);
+        }}
+        resizeMode="cover"
+      />
+    );
+  }
+  return (
+    <View style={{ width: size, height: size, borderRadius: radius, backgroundColor: "#111", alignItems: "center", justifyContent: "center" }}>
+      <Text style={{ color: "#fff", fontSize: size * 0.35, fontWeight: "700" }}>{initials}</Text>
+    </View>
+  );
+}
+
+// ── TopBar with Profile Popup Card ───────────────────────────────────────────
 function TopBar() {
   const { user } = useUser();
   const { signOut } = useAuth();
   const router = useRouter();
 
-  const handleProfilePress = () => {
-    Alert.alert(
-      "Profile",
-      `Logged in as ${user?.fullName || user?.primaryEmailAddress?.emailAddress}`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Sign Out",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await signOut();
-              router.replace("/(auth)/sign-in");
-            } catch (err) {
-              console.error("Sign out error:", err);
-            }
-          },
-        },
-      ]
-    );
+  const [showProfile, setShowProfile] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.88)).current;
+
+  const openProfile = () => {
+    setShowProfile(true);
+    Animated.parallel([
+      Animated.spring(fadeAnim, { toValue: 1, useNativeDriver: true, friction: 9, tension: 80 }),
+      Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, friction: 9, tension: 80 }),
+    ]).start();
   };
+
+  const closeProfile = () => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 0, duration: 160, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 0.88, duration: 160, useNativeDriver: true }),
+    ]).start(() => setShowProfile(false));
+  };
+
+  const handleSignOut = () => {
+    closeProfile();
+    setTimeout(async () => {
+      try {
+        await signOut();
+        router.replace("/(auth)/sign-in");
+      } catch (err) {
+        console.error("Sign out error:", err);
+      }
+    }, 200);
+  };
+
+  // ── Clerk user data ──────────────────────────────────────────────
+  const fullName  = user?.fullName || "";
+  const firstName = user?.firstName || "";
+  const lastName  = user?.lastName || "";
+  const email     = user?.primaryEmailAddress?.emailAddress || "";
+  const phone     = user?.primaryPhoneNumber?.phoneNumber || null;
+  const username  = user?.username || null;
+  const role      = (user?.unsafeMetadata?.role as string) || null;
+  const createdAt = user?.createdAt
+    ? new Date(user.createdAt).toLocaleDateString("en-US", {
+        year: "numeric", month: "long", day: "numeric",
+      })
+    : null;
+  // Get Google profile photo directly from externalAccounts if available
+  const googleAccount = user?.externalAccounts?.find((a) => a.provider === "google");
+  const googlePhoto = googleAccount?.imageUrl || null;
+  // Clerk imageUrl works for Google signups — use it directly with a cache-bust
+  const clerkPhoto = user?.imageUrl || null;
+  const avatarUrl =
+    googlePhoto ||
+    clerkPhoto ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName || email || "U")}&background=111111&color=fff&size=128&bold=true&format=png`;
+  const displayName = fullName || email || "MedVise User";
+  const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || email.charAt(0).toUpperCase() || "U";
+
   return (
-    <View style={styles.topBar}>
-      <View style={{ width: 40 }} />
-      <Text style={styles.title}>MedVise</Text>
-      <TouchableOpacity onPress={handleProfilePress}>
-        <Image
-          source={{
-            uri:
-              user?.imageUrl ||
-              "https://api.dicebear.com/7.x/initials/svg?seed=Guest",
-          }}
-          style={styles.avatar}
-        />
-      </TouchableOpacity>
-    </View>
+    <>
+      {/* ── Navigation bar ── */}
+      <View style={styles.topBar}>
+        <View style={{ width: 40 }} />
+        <Text style={styles.title}>MedVise</Text>
+        <TouchableOpacity onPress={openProfile} activeOpacity={0.75}>
+          <UserAvatar url={avatarUrl} initials={initials} size={36} />
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Profile popup ── */}
+      <Modal
+        transparent
+        visible={showProfile}
+        animationType="none"
+        onRequestClose={closeProfile}
+      >
+        <TouchableOpacity
+          style={profileStyles.overlay}
+          activeOpacity={1}
+          onPress={closeProfile}
+        >
+          <Animated.View
+            style={[
+              profileStyles.card,
+              { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
+            ]}
+          >
+            {/* Inner touchable stops tap-through */}
+            <TouchableOpacity activeOpacity={1}>
+
+              {/* Header: avatar + name */}
+              <View style={profileStyles.header}>
+                <View style={profileStyles.avatarWrap}>
+                  <UserAvatar url={avatarUrl} initials={initials} size={72} />
+                  <View style={profileStyles.onlineDot} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={profileStyles.name} numberOfLines={1}>
+                    {displayName}
+                  </Text>
+                  {username ? (
+                    <Text style={profileStyles.username}>@{username}</Text>
+                  ) : null}
+                  <View style={profileStyles.badgeRow}>
+                    {role ? (
+                      <View style={[
+                        profileStyles.badge,
+                        { backgroundColor: "#f0f0f0" },
+                      ]}>
+                        <Text style={[
+                          profileStyles.badgeText,
+                          { color: "#111" },
+                        ]}>
+                          {role.charAt(0).toUpperCase() + role.slice(1)}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={profileStyles.badge}>
+                        <Text style={profileStyles.badgeText}>MedVise User</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </View>
+
+              <View style={profileStyles.divider} />
+
+              {/* Info rows */}
+              <View style={profileStyles.infoSection}>
+                {email ? (
+                  <View style={profileStyles.infoRow}>
+                    <View style={[profileStyles.infoIconWrap, { backgroundColor: "#f0f0f0" }]}>
+                      <Ionicons name="mail-outline" size={15} color="#444" />
+                    </View>
+                    <Text style={profileStyles.infoText} numberOfLines={1}>{email}</Text>
+                  </View>
+                ) : null}
+
+                {phone ? (
+                  <View style={profileStyles.infoRow}>
+                    <View style={[profileStyles.infoIconWrap, { backgroundColor: "#f5f5f5" }]}>
+                      <Ionicons name="call-outline" size={15} color="#444" />
+                    </View>
+                    <Text style={profileStyles.infoText}>{phone}</Text>
+                  </View>
+                ) : null}
+
+                {firstName && lastName ? (
+                  <View style={profileStyles.infoRow}>
+                    <View style={[profileStyles.infoIconWrap, { backgroundColor: "#f5f5f5" }]}>
+                      <Ionicons name="person-outline" size={15} color="#444" />
+                    </View>
+                    <Text style={profileStyles.infoText}>{firstName} {lastName}</Text>
+                  </View>
+                ) : null}
+
+                {createdAt ? (
+                  <View style={profileStyles.infoRow}>
+                    <View style={[profileStyles.infoIconWrap, { backgroundColor: "#f5f5f5" }]}>
+                      <Ionicons name="calendar-outline" size={15} color="#444" />
+                    </View>
+                    <Text style={profileStyles.infoText}>Member since {createdAt}</Text>
+                  </View>
+                ) : null}
+              </View>
+
+              <View style={profileStyles.divider} />
+
+              {/* Action buttons */}
+              <View style={profileStyles.actions}>
+                <TouchableOpacity style={profileStyles.closeBtn} onPress={closeProfile}>
+                  <Text style={profileStyles.closeBtnText}>Close</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={profileStyles.signOutBtn} onPress={handleSignOut}>
+                  <Ionicons name="log-out-outline" size={16} color="#fff" />
+                  <Text style={profileStyles.signOutText}>Sign Out</Text>
+                </TouchableOpacity>
+              </View>
+
+            </TouchableOpacity>
+          </Animated.View>
+        </TouchableOpacity>
+      </Modal>
+    </>
   );
 }
 
+// ── Main Styles ───────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#fff" },
   topBar: {
@@ -449,32 +603,25 @@ const styles = StyleSheet.create({
     transform: [{ scaleY: -1 }],
     paddingBottom: 50,
   },
-
-
   message: {
     marginVertical: 4,
-    paddingHorizontal: 14, // Nice horizontal breathing room
-    paddingVertical: 10,   // Balanced vertical height
-    borderRadius: 20,      // Softer, more modern roundness
-    maxWidth: "80%",       // Prevents super wide messages
-    minWidth: 48,          // Prevents "Hi" from being a tiny circle
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    maxWidth: "80%",
+    minWidth: 48,
   },
   userMsg: {
     backgroundColor: "#000000ff",
     alignSelf: "flex-end",
-    borderBottomRightRadius: 4, // Subtle corner accent
+    borderBottomRightRadius: 4,
   },
   botMsg: {
-    backgroundColor: "#F2F2F7", // Slightly darker gray for better contrast on white
+    backgroundColor: "#F2F2F7",
     alignSelf: "flex-start",
     borderBottomLeftRadius: 4,
   },
-  textWrapper: {
-    // Ensures text container doesn't force extra width
-    flexShrink: 1,
-  },
-
-  // --- Images ---
+  textWrapper: { flexShrink: 1 },
   sentImage: {
     width: 200,
     height: 200,
@@ -483,8 +630,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     backgroundColor: "#e1e1e1",
   },
-
-  // --- Animation & UI ---
   centerWrapper: {
     width: 80,
     height: 80,
@@ -574,7 +719,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginLeft: 4,
     marginBottom: 0,
-
   },
   sendBtnEnabled: { backgroundColor: "#000000ff" },
   sendBtnDisabled: { backgroundColor: "#E0E0E0" },
@@ -604,8 +748,135 @@ const styles = StyleSheet.create({
   attachText: { fontSize: 13, color: "#333", fontWeight: "500" },
 });
 
-// --- Fixed Markdown Styles ---
-// We remove margins here so the bubble padding controls the look
+// ── Profile Card Styles ───────────────────────────────────────────────────────
+const profileStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  card: {
+    width: "100%",
+    backgroundColor: "#fff",
+    borderRadius: 28,
+    paddingTop: 24,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 30,
+    elevation: 16,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    gap: 14,
+  },
+  avatarWrap: { position: "relative" },
+  bigAvatar: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: "#e0e0e0",
+    borderWidth: 2.5,
+    borderColor: "#f0f0f0",
+  },
+  onlineDot: {
+    position: "absolute",
+    bottom: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#111",
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  name: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111",
+    marginBottom: 2,
+  },
+  username: {
+    fontSize: 13,
+    color: "#999",
+    marginBottom: 6,
+  },
+  badgeRow: { flexDirection: "row" },
+  badge: {
+    backgroundColor: "#f0f0f0",
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  badgeText: {
+    fontSize: 11,
+    color: "#111",
+    fontWeight: "700",
+  },
+  divider: {
+    height: 0.6,
+    backgroundColor: "#f0f0f0",
+    marginVertical: 14,
+  },
+  infoSection: { gap: 12 },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  infoIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  infoText: {
+    fontSize: 14,
+    color: "#444",
+    flex: 1,
+  },
+  actions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+    marginTop: 4,
+  },
+  closeBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e8e8e8",
+    backgroundColor: "#fafafa",
+  },
+  closeBtnText: {
+    fontSize: 14,
+    color: "#555",
+    fontWeight: "500",
+  },
+  signOutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+    borderRadius: 14,
+    backgroundColor: "#111",
+  },
+  signOutText: {
+    fontSize: 14,
+    color: "#fff",
+    fontWeight: "600",
+  },
+});
+
+// ── Markdown Styles ───────────────────────────────────────────────────────────
 const userMarkdownStyles = StyleSheet.create({
   body: { color: "#fff", fontSize: 16, lineHeight: 22 },
   paragraph: { margin: 0, padding: 0 },
