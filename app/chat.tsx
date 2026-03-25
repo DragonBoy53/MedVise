@@ -4,27 +4,11 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-  Alert,
-  Animated,
-  Dimensions,
-  Easing,
-  FlatList,
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+  Alert, Animated, Dimensions, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, StatusBar,
+  StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-
-// @ts-ignore
 import Markdown from "react-native-markdown-display";
+import { SafeAreaView } from "react-native-safe-area-context";
 import apiClient from "../api/client";
 
 type Message = {
@@ -46,7 +30,6 @@ export default function ChatScreen() {
   const pulseOpacity = useRef(new Animated.Value(0.6)).current;
   const centerScale = useRef(new Animated.Value(1)).current;
 
-  // Animation Loop
   useEffect(() => {
     Animated.loop(
       Animated.parallel([
@@ -299,7 +282,7 @@ export default function ChatScreen() {
         </View>
       </KeyboardAvoidingView>
 
-      {/* Attachment Menu Modal */}
+     
       <Modal
         transparent={true}
         visible={showAttachMenu}
@@ -357,11 +340,9 @@ export default function ChatScreen() {
   );
 }
 
-// ── UserAvatar: shows real photo or initials fallback ────────────────────────
 function UserAvatar({ url, initials, size }: { url: string; initials: string; size: number }) {
   const [failed, setFailed] = useState(false);
   const radius = size / 2;
-  // Always try the URL first — only fall back to initials if it actually errors
   if (url && !failed) {
     return (
       <Image
@@ -382,7 +363,6 @@ function UserAvatar({ url, initials, size }: { url: string; initials: string; si
   );
 }
 
-// ── TopBar with Profile Popup Card ───────────────────────────────────────────
 function TopBar() {
   const { user } = useUser();
   const { signOut } = useAuth();
@@ -419,7 +399,6 @@ function TopBar() {
     }, 200);
   };
 
-  // ── Clerk user data ──────────────────────────────────────────────
   const fullName  = user?.fullName || "";
   const firstName = user?.firstName || "";
   const lastName  = user?.lastName || "";
@@ -448,7 +427,9 @@ function TopBar() {
     <>
       {/* ── Navigation bar ── */}
       <View style={styles.topBar}>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity onPress={() => router.push("/settings")} style={{ width: 40 }}>
+  <Ionicons name="settings-outline" size={22} color="#444" />
+</TouchableOpacity>
         <Text style={styles.title}>MedVise</Text>
         <TouchableOpacity onPress={openProfile} activeOpacity={0.75}>
           <UserAvatar url={avatarUrl} initials={initials} size={36} />
@@ -473,10 +454,10 @@ function TopBar() {
               { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
             ]}
           >
-            {/* Inner touchable stops tap-through */}
+          
             <TouchableOpacity activeOpacity={1}>
 
-              {/* Header: avatar + name */}
+             
               <View style={profileStyles.header}>
                 <View style={profileStyles.avatarWrap}>
                   <UserAvatar url={avatarUrl} initials={initials} size={72} />
@@ -513,7 +494,7 @@ function TopBar() {
 
               <View style={profileStyles.divider} />
 
-              {/* Info rows */}
+            
               <View style={profileStyles.infoSection}>
                 {email ? (
                   <View style={profileStyles.infoRow}>
@@ -554,7 +535,7 @@ function TopBar() {
 
               <View style={profileStyles.divider} />
 
-              {/* Action buttons */}
+          
               <View style={profileStyles.actions}>
                 <TouchableOpacity style={profileStyles.closeBtn} onPress={closeProfile}>
                   <Text style={profileStyles.closeBtnText}>Close</Text>
@@ -573,7 +554,6 @@ function TopBar() {
   );
 }
 
-// ── Main Styles ───────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#fff" },
   topBar: {
@@ -748,7 +728,6 @@ const styles = StyleSheet.create({
   attachText: { fontSize: 13, color: "#333", fontWeight: "500" },
 });
 
-// ── Profile Card Styles ───────────────────────────────────────────────────────
 const profileStyles = StyleSheet.create({
   overlay: {
     flex: 1,
@@ -876,7 +855,6 @@ const profileStyles = StyleSheet.create({
   },
 });
 
-// ── Markdown Styles ───────────────────────────────────────────────────────────
 const userMarkdownStyles = StyleSheet.create({
   body: { color: "#fff", fontSize: 16, lineHeight: 22 },
   paragraph: { margin: 0, padding: 0 },
