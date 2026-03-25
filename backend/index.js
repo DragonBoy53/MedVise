@@ -4,9 +4,8 @@ const { Pool } = require("pg");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
-const multer = require("multer"); 
-const fs = require("fs");         
-const { GoogleGenAI } = require("@google/genai"); // Ensure you have installed @google/genai
+const multer = require("multer");
+const chatController = require("./controllers/chatController");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -23,12 +22,9 @@ const pool = new Pool({
   },
 });
 
-// Initialize Google AI
-// Note: Depending on your exact SDK version, this initialization matches the new @google/genai lib
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
 // Configure Multer for temp storage
-const upload = multer({ dest: "/tmp" }); 
+const upload = multer({ dest: "/tmp" });
+
 
 // --- ROUTES ---
 
@@ -86,71 +82,9 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// 3. Chat Route (Updated to use your specific Image Understanding Logic)
-app.post("/api/chat", upload.single("image"), async (req, res) => {
-  try {
-    const message = req.body.message || ""; 
-    const file = req.file;
-    const modelName = "gemini-2.5-flash"; 
+// 3. Chat Route
+app.post("/api/chat", upload.single("image"), chatController);
 
-    // Initialize the contents array
-    let contents = [];
-
-    // 1. Handle Image (Prioritize adding image data first if it exists)
-    if (file) {
-      const imageBuffer = fs.readFileSync(file.path);
-      const imageBase64 = imageBuffer.toString("base64");
-      
-      // Pushing the image object exactly as your snippet requires
-      contents.push({
-        inlineData: {
-          mimeType: file.mimetype, // e.g., 'image/jpeg'
-          data: imageBase64,
-        },
-      });
-    }
-
-    // 2. Handle Text (Push text object to the same array)
-    // If no message is provided but an image is, we provide a default prompt
-    const promptText = message || (file ? "Analyze this image." : "Hello");
-    
-    contents.push({ 
-        text: promptText 
-    });
-
-    // 3. Generate Content
-    // Passing the simple flat 'contents' array as seen in your sample code
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: contents,
-    });
-
-    // Depending on the exact version of @google/genai, response.text might be a property or a function.
-    // Based on your snippet "console.log(response.text)", we use the property access.
-    // If you get undefined, try response.text()
-    const replyText = response.text || "No response text found.";
-
-    // 4. Cleanup Temp File
-    if (file) {
-      try { fs.unlinkSync(file.path); } catch (e) { console.error("Cleanup error", e); }
-    }
-
-    res.json({ reply: replyText });
-
-  } catch (error) {
-    console.error("Gemini API Error:", error);
-    
-    // Cleanup on error as well
-    if (req.file) {
-      try { fs.unlinkSync(req.file.path); } catch (e) {}
-    }
-
-    res.status(500).json({ 
-      message: "AI Service Unavailable", 
-      details: error.message 
-    });
-  }
-});
 
 if (require.main === module) {
     app.listen(PORT, () => {
