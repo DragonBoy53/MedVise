@@ -1,6 +1,7 @@
 require("dotenv").config();
 const { GoogleGenAI } = require("@google/genai");
 
+// Initialize the new Gemini Client
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const SYSTEM_INSTRUCTION = `
@@ -12,8 +13,7 @@ You are MedVise Assistant — an AI-powered medical support companion built into
 
 ## Domain Restriction
 - You ONLY discuss topics within the medical and healthcare domain: symptoms, diseases, medications, diagnostics, wellness, anatomy, lab values, and general health guidance.
-- If the user asks about programming, software, recipes, weather, history, sports, finance, or ANY non-medical topic, politely decline and steer the conversation back to health:
-  Example: "I'm here to help with medical and health-related questions only. Is there anything about your health or symptoms I can assist you with?"
+- If the user asks about programming, software, recipes, weather, history, sports, finance, or ANY non-medical topic, politely decline and steer the conversation back to health.
 
 ## Tone and Style
 - Be empathetic, calm, clear, and professional.
@@ -23,12 +23,12 @@ You are MedVise Assistant — an AI-powered medical support companion built into
 
 ## Tool Usage (ML Model Predictions)
 - You have access to three specialized ML prediction tools. Use them intelligently based on the user's symptoms:
-  - predict_cardiology: when symptoms relate to the heart (chest pain, shortness of breath, palpitations, irregular heartbeat, jaw/arm pain).
-  - predict_diabetes: when symptoms relate to diabetes (extreme thirst, frequent urination, sudden weight loss, blurred vision, high blood glucose readings, numbness in extremities).
-  - predict_thyroid: when symptoms relate to thyroid disorders (fatigue, unexplained weight gain or loss, hair loss, cold or heat intolerance, neck swelling, voice changes, TSH/T3/T4 abnormalities).
+  - predict_cardiology: for heart issues (chest pain, shortness of breath, high blood pressure).
+  - predict_diabetes: for diabetes (extreme thirst, frequent urination, high blood glucose).
+  - predict_thyroid: for thyroid disorders (fatigue, unexplained weight changes, neck swelling, TSH/T3/T4 abnormalities).
 - Before calling a tool, extract as many feature values as possible from the user's message.
-- If critical feature values are missing, ask the user for them in a friendly, conversational way before invoking the tool. Never call a tool with completely unknown/null values for the core clinical fields.
-- After receiving tool results, interpret them for the patient in plain language and include the medical disclaimer.
+- If critical feature values are missing, ask the user for them in a friendly, conversational way before invoking the tool.
+- After receiving tool results, interpret them for the patient in plain language.
 `.trim();
 
 const tools = [
@@ -36,79 +36,74 @@ const tools = [
     functionDeclarations: [
       {
         name: "predict_cardiology",
-        description:
-          "Predicts cardiovascular disease risk. Call when a user reports cardiac symptoms: chest pain, shortness of breath, palpitations, high blood pressure, or mentions heart-related lab values.",
+        description: "Predicts cardiovascular disease risk. Call when a user reports cardiac symptoms or mentions heart-related lab values.",
         parameters: {
-          type: "object",
+          type: "OBJECT",
           properties: {
             extracted_features: {
-              type: "object",
-              description: "Features matching the CardiologyInput Pydantic model in the ML service.",
+              type: "OBJECT",
+              description: "Features matching the CardiologyInput model.",
               properties: {
-                age:         { type: "number", description: "Patient age in years." },
-                gender:      { type: "number", description: "Gender: 1 = male, 0 = female." },
-                height:      { type: "number", description: "Height in centimetres." },
-                weight:      { type: "number", description: "Weight in kilograms." },
-                ap_hi:       { type: "number", description: "Systolic blood pressure (mmHg)." },
-                ap_lo:       { type: "number", description: "Diastolic blood pressure (mmHg)." },
-                cholesterol: { type: "number", description: "Cholesterol level: 1 = normal, 2 = above normal, 3 = well above normal." },
-                gluc:        { type: "number", description: "Glucose level: 1 = normal, 2 = above normal, 3 = well above normal." },
-                smoke:       { type: "number", description: "Smoking status: 1 = yes, 0 = no." },
-                alco:        { type: "number", description: "Alcohol intake: 1 = yes, 0 = no." },
-                active:      { type: "number", description: "Physical activity: 1 = yes, 0 = no." },
+                age: { type: "NUMBER", description: "Patient age in years." },
+                gender: { type: "INTEGER", description: "Gender: 1 = male, 2 = female, 0 = unknown." },
+                height: { type: "NUMBER", description: "Height in centimetres." },
+                weight: { type: "NUMBER", description: "Weight in kilograms." },
+                ap_hi: { type: "NUMBER", description: "Systolic blood pressure (mmHg)." },
+                ap_lo: { type: "NUMBER", description: "Diastolic blood pressure (mmHg)." },
+                cholesterol: { type: "INTEGER", description: "Cholesterol level: 1 = normal, 2 = above normal, 3 = well above normal." },
+                gluc: { type: "INTEGER", description: "Glucose level: 1 = normal, 2 = above normal, 3 = well above normal." },
+                smoke: { type: "INTEGER", description: "Smoking status: 1 = yes, 0 = no." },
+                alco: { type: "INTEGER", description: "Alcohol intake: 1 = yes, 0 = no." },
+                active: { type: "INTEGER", description: "Physical activity: 1 = yes, 0 = no." },
               },
-              required: ["age", "gender", "ap_hi", "ap_lo", "cholesterol"],
+              required: ["age", "ap_hi", "ap_lo", "cholesterol"],
             },
           },
           required: ["extracted_features"],
         },
       },
-
       {
         name: "predict_diabetes",
-        description:
-          "Predicts diabetes risk. Call when a user reports extreme thirst, frequent urination, sudden weight loss, blurred vision, high blood glucose, or mentions insulin/glucose lab values.",
+        description: "Predicts diabetes risk. Call when a user reports thirst, frequent urination, blurred vision, or mentions blood glucose levels.",
         parameters: {
-          type: "object",
+          type: "OBJECT",
           properties: {
             extracted_features: {
-              type: "object",
-              description: "Features matching the DiabetesInput Pydantic model in the ML service (PIMA dataset).",
+              type: "OBJECT",
+              description: "Features matching your exact CatBoost dataset for Diabetes.",
               properties: {
-                pregnancies:     { type: "number", description: "Number of times pregnant (use 0 for males)." },
-                glucose:         { type: "number", description: "Plasma glucose concentration in mg/dL (2-hour oral glucose tolerance test)." },
-                blood_pressure:  { type: "number", description: "Diastolic blood pressure in mmHg." },
-                skin_thickness:  { type: "number", description: "Triceps skinfold thickness in mm." },
-                insulin:         { type: "number", description: "2-hour serum insulin in µU/mL." },
-                bmi:             { type: "number", description: "Body Mass Index (kg/m²)." },
-                dpf:             { type: "number", description: "Diabetes Pedigree Function — genetic diabetes risk score based on family history." },
-                age:             { type: "number", description: "Patient age in years." },
+                age: { type: "NUMBER", description: "Patient age in years." },
+                gender: { type: "STRING", description: "'Male', 'Female', or 'Other'" },
+                bmi: { type: "NUMBER", description: "Body Mass Index (kg/m²)." },
+                blood_glucose_level: { type: "NUMBER", description: "Blood glucose level in mg/dL" },
+                HbA1c_level: { type: "NUMBER", description: "HbA1c level percentage" },
+                hypertension: { type: "INTEGER", description: "1 if they have hypertension, 0 if not" },
+                heart_disease: { type: "INTEGER", description: "1 if they have heart disease, 0 if not" },
+                smoking_history: { type: "STRING", description: "'never', 'former', 'current', or 'No Info'" },
               },
-              required: ["glucose", "bmi", "age"],
+              required: ["age", "blood_glucose_level", "bmi"],
             },
           },
           required: ["extracted_features"],
         },
       },
-
       {
         name: "predict_thyroid",
-        description:
-          "Predicts thyroid disease risk. Call when a user reports fatigue, unexplained weight gain/loss, hair loss, cold/heat intolerance, neck swelling, or mentions abnormal TSH/T3/T4 lab values.",
+        description: "Predicts thyroid disease risk. Call when a user reports fatigue, weight changes, cold/heat intolerance, or TSH/T3/T4 values.",
         parameters: {
-          type: "object",
+          type: "OBJECT",
           properties: {
             extracted_features: {
-              type: "object",
-              description: "Features matching the ThyroidInput Pydantic model in the ML service.",
+              type: "OBJECT",
+              description: "Features matching the ThyroidInput model.",
               properties: {
-                age: { type: "number", description: "Patient age in years." },
-                sex: { type: "number", description: "Sex: 1 = male, 0 = female." },
-                tsh: { type: "number", description: "Thyroid Stimulating Hormone level (mIU/L). Normal range: 0.4 – 4.0." },
-                t3:  { type: "number", description: "Triiodothyronine (T3) level (nmol/L). Normal: 1.2 – 2.7." },
-                tt4: { type: "number", description: "Total Thyroxine (TT4) level (nmol/L). Normal: 64 – 154." },
-                t4u: { type: "number", description: "T4 Uptake ratio. Normal: 0.7 – 1.05." },
-                fti: { type: "number", description: "Free Thyroxine Index (FTI). Normal: 63 – 150." },
+                age: { type: "NUMBER", description: "Patient age in years." },
+                sex: { type: "INTEGER", description: "Sex: 1 = male, 0 = female." },
+                tsh: { type: "NUMBER", description: "Thyroid Stimulating Hormone level (mIU/L)." },
+                t3: { type: "NUMBER", description: "Triiodothyronine (T3) level (nmol/L)." },
+                tt4: { type: "NUMBER", description: "Total Thyroxine (TT4) level (nmol/L)." },
+                t4u: { type: "NUMBER", description: "T4 Uptake ratio." },
+                fti: { type: "NUMBER", description: "Free Thyroxine Index (FTI)." },
               },
               required: ["age", "sex", "tsh"],
             },

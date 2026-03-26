@@ -6,31 +6,26 @@ const MODEL_NAME = "gemini-2.5-flash";
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL;
 
 async function runCardiologyModel(features) {
-  if (!ML_SERVICE_URL) {
-    return { error: "ML service not configured.", note: "ML_SERVICE_URL environment variable is not set." };
-  }
+  if (!ML_SERVICE_URL) return { error: "ML_SERVICE_URL not configured." };
   const res = await axios.post(`${ML_SERVICE_URL}/predict/cardiology`, features, { timeout: 15000 });
   return res.data;
 }
 
 async function runDiabetesModel(features) {
-  if (!ML_SERVICE_URL) {
-    return { error: "ML service not configured.", note: "ML_SERVICE_URL environment variable is not set." };
-  }
+  if (!ML_SERVICE_URL) return { error: "ML_SERVICE_URL not configured." };
   const res = await axios.post(`${ML_SERVICE_URL}/predict/diabetes`, features, { timeout: 15000 });
   return res.data;
 }
 
 async function runThyroidModel(features) {
-  if (!ML_SERVICE_URL) {
-    return { error: "ML service not configured.", note: "ML_SERVICE_URL environment variable is not set." };
-  }
+  if (!ML_SERVICE_URL) return { error: "ML_SERVICE_URL not configured." };
   const res = await axios.post(`${ML_SERVICE_URL}/predict/thyroid`, features, { timeout: 15000 });
   return res.data;
 }
 
 async function dispatchTool(name, args) {
-  const { extracted_features } = args;
+  const extracted_features = args.extracted_features || args;
+
   switch (name) {
     case "predict_cardiology":
       return runCardiologyModel(extracted_features);
@@ -50,6 +45,7 @@ async function chatController(req, res) {
     const message = req.body.message || "";
     const userParts = [];
 
+    // Attach image data if uploaded
     if (file) {
       const imageBuffer = fs.readFileSync(file.path);
       userParts.push({
@@ -65,34 +61,39 @@ async function chatController(req, res) {
 
     let contents = [{ role: "user", parts: userParts }];
 
+    // Initial Request to Gemini
     let response = await ai.models.generateContent({
       model: MODEL_NAME,
       config: { systemInstruction: SYSTEM_INSTRUCTION, tools },
       contents,
     });
 
-    let maxIterations = 5;
+    let maxIterations = 3;
     while (maxIterations-- > 0) {
       const candidate = response.candidates?.[0];
       if (!candidate) break;
 
+      // Check if Gemini wants to call a function
       const fcPart = candidate.content?.parts?.find((p) => p.functionCall);
-      if (!fcPart) break;
+      if (!fcPart) break; // If no function call, exit loop
 
       const { name, args } = fcPart.functionCall;
       console.log(`[chatController] Tool called: ${name}`);
 
+      // Call the Python FastAPI Service
       const toolResult = await dispatchTool(name, args);
 
-      contents = [
-        ...contents,
-        { role: "model", parts: [{ functionCall: { name, args } }] },
-        {
-          role: "user",
-          parts: [{ functionResponse: { name, response: { result: toolResult } } }],
-        },
-      ];
+      // Append interaction to conversation history
+      contents.push({
+        role: "model",
+        parts: [{ functionCall: { name, args } }]
+      });
+      contents.push({
+        role: "user",
+        parts: [{ functionResponse: { name, response: { result: toolResult } } }],
+      });
 
+      // Send the result back to Gemini to summarize
       response = await ai.models.generateContent({
         model: MODEL_NAME,
         config: { systemInstruction: SYSTEM_INSTRUCTION, tools },
@@ -100,6 +101,7 @@ async function chatController(req, res) {
       });
     }
 
+    // Extract final text response
     const replyText =
       response.candidates?.[0]?.content?.parts
         ?.filter((p) => p.text)
@@ -109,8 +111,9 @@ async function chatController(req, res) {
       response.text ||
       "I'm sorry, I couldn't generate a response. Please try again.";
 
+    // Cleanup image upload
     if (file) {
-      try { fs.unlinkSync(file.path); } catch (e) { console.warn("Temp file cleanup failed:", e.message); }
+      try { fs.unlinkSync(file.path); } catch (e) { console.warn("Temp cleanup failed"); }
     }
 
     res.json({ reply: replyText });
@@ -119,7 +122,7 @@ async function chatController(req, res) {
     console.error("[chatController] Error:", error);
 
     if (file) {
-      try { fs.unlinkSync(file.path); } catch (e) {}
+      try { fs.unlinkSync(file.path); } catch (e) { }
     }
 
     res.status(500).json({

@@ -33,14 +33,16 @@ app = FastAPI(
 def health():
     return {"status": "ok", "models": ["thyroid", "diabetes", "cardiology"]}
 
+from typing import Optional
+
 class ThyroidInput(BaseModel):
-    age: int
-    sex: int
-    tsh: float
-    t3: float
-    tt4: float
-    t4u: float
-    fti: float
+    age: int = 0
+    sex: int = 0
+    tsh: float = 0.0
+    t3: float = 0.0
+    tt4: float = 0.0
+    t4u: float = 0.0
+    fti: float = 0.0
 
 @app.post("/predict/thyroid")
 def predict_thyroid(body: ThyroidInput):
@@ -59,14 +61,14 @@ def predict_thyroid(body: ThyroidInput):
         raise HTTPException(status_code=500, detail=str(e))
 
 class DiabetesInput(BaseModel):
-    pregnancies: int
-    glucose: float
-    blood_pressure: float
-    skin_thickness: float
-    insulin: float
-    bmi: float
-    dpf: float
-    age: int
+    pregnancies: int = 0
+    glucose: float = 0.0
+    blood_pressure: float = 0.0
+    skin_thickness: float = 0.0
+    insulin: float = 0.0
+    bmi: float = 0.0
+    dpf: float = 0.0
+    age: int = 0
 
 @app.post("/predict/diabetes")
 def predict_diabetes(body: DiabetesInput):
@@ -81,17 +83,17 @@ def predict_diabetes(body: DiabetesInput):
         raise HTTPException(status_code=500, detail=str(e))
 
 class CardiologyInput(BaseModel):
-    age: float
-    gender: int
-    height: float
-    weight: float
-    ap_hi: float
-    ap_lo: float
-    cholesterol: int
-    gluc: int
-    smoke: int
-    alco: int
-    active: int
+    age: float = 0.0
+    gender: int = 0
+    height: float = 0.0
+    weight: float = 0.0
+    ap_hi: float = 0.0
+    ap_lo: float = 0.0
+    cholesterol: int = 1
+    gluc: int = 1
+    smoke: int = 0
+    alco: int = 0
+    active: int = 0
 
 CARDIOLOGY_LABELS = {0: "Healthy", 1: "Mild Heart Disease", 2: "Severe Heart Disease"}
 
