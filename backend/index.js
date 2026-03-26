@@ -10,11 +10,10 @@ const chatController = require("./controllers/chatController");
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Database Connection
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
@@ -22,13 +21,7 @@ const pool = new Pool({
   },
 });
 
-// Configure Multer for temp storage
 const upload = multer({ dest: "/tmp" });
-
-
-// --- ROUTES ---
-
-// 1. Register
 app.post("/api/register", async (req, res) => {
   try {
     const { fullName, email, password, role } = req.body;
@@ -52,7 +45,6 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
-// 2. Login
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -82,10 +74,8 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// 3. Chat Route
+
 app.post("/api/chat", upload.single("image"), chatController);
-
-
 if (require.main === module) {
     app.listen(PORT, () => {
         console.log(`Server running on port ${PORT}`);

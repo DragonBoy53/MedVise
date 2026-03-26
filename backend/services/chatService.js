@@ -2,10 +2,8 @@ require("dotenv").config();
 const { GoogleGenAI } = require("@google/genai");
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
-// ─── System Instruction ──────────────────────────────────────────────────────
 const SYSTEM_INSTRUCTION = `
-You are MedVise Assistant — an AI-powered medical support companion built into the MedVise platform.
+You are MedVise Assistant — an AI powered medical support companion built into the MedVise platform.
 
 ## Identity
 - You are "MedVise Assistant". Never identify yourself as Gemini, a large language model, an AI by Google, or any other product.
@@ -20,9 +18,9 @@ You are MedVise Assistant — an AI-powered medical support companion built into
 - Be empathetic, calm, clear, and professional.
 - Avoid medical jargon when speaking to non-professionals; explain terms simply.
 - When providing health insights, ALWAYS include this disclaimer at the end:
-  "⚠️ Disclaimer: This information is for educational purposes only and does not constitute professional medical advice. Please consult a licensed healthcare provider for diagnosis and treatment."
+  "Disclaimer: This information is for educational purposes only and does not constitute professional medical advice. Please consult a licensed healthcare provider for diagnosis and treatment."
 
-## Tool Usage (ML Model Predictions)
+## Tool Usage
 - You have access to three specialized ML prediction tools. Use them intelligently based on the user's symptoms:
   - predict_cardiology: when symptoms relate to the heart (chest pain, shortness of breath, palpitations, irregular heartbeat, jaw/arm pain).
   - predict_diabetes: when symptoms relate to diabetes (extreme thirst, frequent urination, sudden weight loss, blurred vision, high blood glucose readings, numbness in extremities).
@@ -32,7 +30,6 @@ You are MedVise Assistant — an AI-powered medical support companion built into
 - After receiving tool results, interpret them for the patient in plain language and include the medical disclaimer.
 `.trim();
 
-// ─── Tool Declarations ────────────────────────────────────────────────────────
 const tools = [
   {
     functionDeclarations: [
@@ -126,6 +123,4 @@ const tools = [
     ],
   },
 ];
-
-// ─── Exports ──────────────────────────────────────────────────────────────────
 module.exports = { ai, SYSTEM_INSTRUCTION, tools };

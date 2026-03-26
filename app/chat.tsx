@@ -212,10 +212,11 @@ export default function ChatScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <TopBar />
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
+    <KeyboardAvoidingView
+  style={{ flex: 1 }}
+  behavior={Platform.OS === "ios" ? "padding" : "height"}
+  keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+>
         <View style={styles.container}>
           <FlatList
             inverted
@@ -435,8 +436,6 @@ function TopBar() {
           <UserAvatar url={avatarUrl} initials={initials} size={36} />
         </TouchableOpacity>
       </View>
-
-      {/* ── Profile popup ── */}
       <Modal
         transparent
         visible={showProfile}

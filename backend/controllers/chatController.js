@@ -1,10 +1,7 @@
 const fs = require("fs");
 const { ai, SYSTEM_INSTRUCTION, tools } = require("../services/chatService");
-
 const MODEL_NAME = "gemini-2.5-flash";
 
-// ─── ML Stub Handlers ─────────────────────────────────────────────────────────
-// Replace each stub body with a real HTTP call to your ML inference service.
 
 function runCardiologyModel(features) {
   // TODO: Replace with real HTTP call, e.g.:

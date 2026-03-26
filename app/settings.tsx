@@ -2,17 +2,7 @@ import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import {
-    Alert,
-    Animated,
-    Modal,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
-} from "react-native";
+import { Alert, Animated, Modal, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const TERMS_TEXT = `Terms of Use
@@ -61,7 +51,6 @@ const FAQ_ITEMS = [
   { q: "What should I do in an emergency?", a: "Do NOT use MedVise in emergencies. Call your local emergency number ." },
 ];
 
-// ── Main Settings Screen ──────────────────────────────────────────────────────
 export default function SettingsScreen() {
   const { user } = useUser();
   const { signOut } = useAuth();
@@ -82,18 +71,11 @@ export default function SettingsScreen() {
     ]);
   };
 
-  const handleClearHistory = () => {
-    Alert.alert("Clear Chat History", "This will permanently delete all your chat messages.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Clear", style: "destructive", onPress: () => Alert.alert("Done", "Chat history has been cleared.") },
-    ]);
-  };
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
-      {/* Top Bar */}
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={24} color="#111" />
@@ -155,27 +137,18 @@ export default function SettingsScreen() {
         <Text style={styles.versionText}>MedVise v1.0</Text>
       </ScrollView>
 
-      {/* ── Data Controls Modal ── */}
       <InfoModal visible={modalType === "dataControls"} onClose={() => setModalType(null)} title="Data safety" icon="shield-checkmark-outline">
         <Text style={modalStyles.bodyText}>Safety starts with understanding how developers collect and share your data. Data privacy and security practices may vary based on your use, region, and age.</Text>
         <View style={modalStyles.safetyList}>
           <SafetyRow icon="share-social-outline" label="No data shared with third parties" />
           <SafetyRow icon="cloud-offline-outline" label="No data collected" />
           <SafetyRow icon="lock-closed-outline" label="Data is encrypted in transit" />
-          <SafetyRow icon="trash-outline" label="You can request that data be deleted" />
-          <SafetyRow icon="happy-outline" label="Committed to follow the Play Families Policy" />
-          <SafetyRow icon="ribbon-outline" label="Independent security review" />
+      
         </View>
         <View style={modalStyles.divider} />
-        <TouchableOpacity style={modalStyles.actionRow} onPress={() => { setModalType(null); setTimeout(handleClearHistory, 300); }}>
-          <View style={modalStyles.actionLeft}>
-            <View style={[styles.iconWrap, { backgroundColor: "#fff3f3" }]}><Ionicons name="trash" size={18} color="#e74c3c" /></View>
-            <Text style={[modalStyles.actionTitle, { color: "#e74c3c" }]}>Clear Chat History</Text>
-          </View>
-        </TouchableOpacity>
+       
       </InfoModal>
 
-      {/* ── Help Center Modal (Accordion) ── */}
       <InfoModal visible={modalType === "helpCenter"} onClose={() => { setModalType(null); setOpenFaqIndex(null); }} title="Help Center" icon="help-circle-outline">
         {FAQ_ITEMS.map((item, index) => (
           <FAQItem 
@@ -194,7 +167,6 @@ export default function SettingsScreen() {
   );
 }
 
-// ── Sub-Components ────────────────────────────────────────────────────────────
 function SafetyRow({ icon, label }: { icon: string; label: string }) {
   return (
     <View style={modalStyles.safetyRow}>
@@ -251,52 +223,281 @@ function FAQItem({ question, answer, isOpen, onPress }: any) {
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#f5f5f5" },
-  topBar: { height: 56, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, backgroundColor: "#fff", borderBottomWidth: 0.5, borderBottomColor: "#eee" },
-  backBtn: { width: 40, alignItems: "flex-start", justifyContent: "center" },
-  topBarTitle: { fontSize: 16, fontWeight: "600", color: "#111" },
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 24, paddingBottom: 40 },
-  sectionLabel: { fontSize: 11, fontWeight: "700", color: "#999", letterSpacing: 0.8, marginBottom: 8, marginLeft: 4 },
-  section: { backgroundColor: "#fff", borderRadius: 16, marginBottom: 24, overflow: "hidden", borderWidth: 0.5, borderColor: "#efefef" },
-  row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 14 },
-  rowFirst: { borderTopLeftRadius: 16, borderTopRightRadius: 16 },
-  rowLast: { borderBottomLeftRadius: 16, borderBottomRightRadius: 16 },
-  rowLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
-  rowTitle: { fontSize: 15, fontWeight: "500", color: "#111" },
-  rowSubtitle: { fontSize: 12, color: "#888", marginTop: 1, maxWidth: 220 },
-  divider: { height: 0.5, backgroundColor: "#f0f0f0", marginLeft: 60 },
-  iconWrap: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  logoutBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#111", borderRadius: 16, paddingVertical: 16, marginBottom: 16 },
-  logoutText: { fontSize: 15, fontWeight: "700", color: "#fff" },
-  versionText: { textAlign: "center", fontSize: 12, color: "#bbb", marginBottom: 8 },
+  safe: { 
+    flex: 1, 
+    backgroundColor: "#f5f5f5" 
+  },
+
+  topBar: { 
+    height: 56, 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "space-between", 
+    paddingHorizontal: 12, 
+    backgroundColor: "#fff", 
+    borderBottomWidth: 0.5, 
+    borderBottomColor: "#eee" 
+  },
+
+  backBtn: {
+    width: 40, 
+    alignItems: "flex-start", 
+    justifyContent: "center" 
+  },
+
+  topBarTitle: { 
+    fontSize: 16, 
+    fontWeight: "600", 
+    color: "#111" 
+  },
+
+  scroll: { 
+    flex: 1 
+  },
+
+  scrollContent: { 
+    paddingHorizontal: 16, 
+    paddingTop: 24, 
+    paddingBottom: 40 
+  },
+
+  sectionLabel: { 
+    fontSize: 11, 
+    fontWeight: "700", 
+    color: "#999", 
+    letterSpacing: 0.8, 
+    marginBottom: 8, 
+    marginLeft: 4 
+  },
+
+  section: { 
+    backgroundColor: "#fff", 
+    borderRadius: 16, 
+    marginBottom: 24, 
+    overflow: "hidden", 
+    borderWidth: 0.5, 
+    borderColor: "#efefef" 
+  },
+
+  row: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "space-between", 
+    paddingHorizontal: 16, 
+    paddingVertical: 14 
+  },
+
+  rowFirst: { 
+    borderTopLeftRadius: 16, 
+    borderTopRightRadius: 16 
+  },
+
+  rowLast: { 
+    borderBottomLeftRadius: 16, 
+    borderBottomRightRadius: 16 
+  },
+
+  rowLeft: { 
+    flexDirection: "row",
+    alignItems: "center", 
+    gap: 12, 
+    flex: 1 
+  },
+
+  rowTitle: { 
+    fontSize: 15, 
+    fontWeight: "500", 
+    color: "#111" 
+  },
+
+  rowSubtitle: { 
+    fontSize: 12, 
+    color: "#888", 
+    marginTop: 1, 
+    maxWidth: 220 
+  },
+
+  divider: {
+    height: 0.5, 
+    backgroundColor: "#f0f0f0", 
+    marginLeft: 60 
+  },
+
+  iconWrap: { 
+    width: 34, 
+    height: 34, 
+    borderRadius: 10, 
+    alignItems: "center", 
+    justifyContent: "center" 
+  },
+
+  logoutBtn: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "center", 
+    gap: 8, 
+    backgroundColor: "#111", 
+    borderRadius: 16, 
+    paddingVertical: 16, 
+    marginBottom: 16 
+  },
+
+  logoutText: { 
+    fontSize: 15, 
+    fontWeight: "700", 
+    color: "#fff" 
+  },
+
+  versionText: { 
+    textAlign: "center", 
+    fontSize: 12, 
+    color: "#bbb", 
+    marginBottom: 8 
+  },
 });
 
 const modalStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
-  sheet: { backgroundColor: "#fff", borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "85%", paddingTop: 12 },
-  handle: { width: 36, height: 4, backgroundColor: "#e0e0e0", borderRadius: 2, alignSelf: "center", marginBottom: 12 },
-  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingBottom: 14, gap: 10 },
-  headerIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: "#f0f0f0", alignItems: "center", justifyContent: "center" },
-  headerTitle: { fontSize: 17, fontWeight: "700", color: "#111", flex: 1 },
-  closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#f5f5f5", alignItems: "center", justifyContent: "center" },
-  headerDivider: { height: 0.5, backgroundColor: "#f0f0f0", marginBottom: 16 },
-  content: { paddingHorizontal: 20, paddingBottom: 40 },
-  bodyText: { fontSize: 14, color: "#5f6368", lineHeight: 20, marginBottom: 20 },
-  safetyList: { gap: 16, marginBottom: 20 },
-  safetyRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  safetyLabel: { fontSize: 14, color: '#3c4043' },
-  actionRow: { flexDirection: "row", alignItems: "center", paddingVertical: 16 },
-  actionLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
-  actionTitle: { fontSize: 15, fontWeight: "600" },
-  divider: { height: 0.5, backgroundColor: "#f0f0f0" },
+  overlay: { 
+    flex: 1, 
+    backgroundColor: "rgba(0,0,0,0.4)", 
+    justifyContent: "flex-end" 
+  },
+
+  sheet: { 
+    backgroundColor: "#fff", 
+    borderTopLeftRadius: 28, 
+    borderTopRightRadius: 28, 
+    maxHeight: "85%", 
+    paddingTop: 12 
+  },
+
+  handle: { 
+    width: 36, 
+    height: 4, 
+    backgroundColor: "#e0e0e0", 
+    borderRadius: 2, 
+    alignSelf: "center", 
+    marginBottom: 12 
+  },
+
+  header: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    paddingHorizontal: 20, 
+    paddingBottom: 14, 
+    gap: 10 
+  },
+
+  headerIconWrap: { 
+    width: 36, 
+    height: 36, 
+    borderRadius: 10, 
+    backgroundColor: "#f0f0f0", 
+    alignItems: "center", 
+    justifyContent: "center" 
+  },
+
+  headerTitle: { 
+    fontSize: 17, 
+    fontWeight: "700", 
+    color: "#111", 
+    flex: 1 
+  },
+
+  closeBtn: { 
+    width: 32, 
+    height: 32, 
+    borderRadius: 16, 
+    backgroundColor: "#f5f5f5", 
+    alignItems: "center", 
+    justifyContent: "center" 
+  },
+
+  headerDivider: { 
+    height: 0.5, 
+    backgroundColor: "#f0f0f0", 
+    marginBottom: 16 
+  },
+
+  content: { 
+    paddingHorizontal: 20, 
+    paddingBottom: 40 
+  },
+
+  bodyText: { 
+    fontSize: 14, 
+    color: "#5f6368", 
+    lineHeight: 20, 
+    marginBottom: 20 
+  },
+
+  safetyList: { 
+    gap: 16, 
+    marginBottom: 20 
+  },
+
+  safetyRow: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 16 
+  },
+
+  safetyLabel: { 
+    fontSize: 14, 
+    color: "#3c4043" 
+  },
+
+  actionRow: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    paddingVertical: 16 
+  },
+
+  actionLeft: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 12, 
+    flex: 1 
+  },
+
+  actionTitle: { 
+    fontSize: 15, 
+    fontWeight: "600" 
+  },
+
+  divider: { 
+    height: 0.5, 
+    backgroundColor: "#f0f0f0" 
+  },
 });
 
 const faqStyles = StyleSheet.create({
-  item: { borderBottomWidth: 0.5, borderBottomColor: "#f0f0f0", paddingVertical: 4 },
-  question: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 10 },
-  questionText: { fontSize: 14, fontWeight: "600", color: "#111", flex: 1, marginRight: 8 },
-  answerText: { fontSize: 13, color: "#555", lineHeight: 20, paddingBottom: 10 },
+  item: { 
+    borderBottomWidth: 0.5, 
+    borderBottomColor: "#f0f0f0", 
+    paddingVertical: 4 
+  },
+
+  question: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    alignItems: "center", 
+    paddingVertical: 10 
+  },
+
+  questionText: { 
+    fontSize: 14, 
+    fontWeight: "600", 
+    color: "#111", 
+    flex: 1, 
+    marginRight: 8 
+  },
+
+  answerText: { 
+    fontSize: 13, 
+    color: "#555", 
+    lineHeight: 20, 
+    paddingBottom: 10 
+  },
 });

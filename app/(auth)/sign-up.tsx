@@ -2,16 +2,7 @@ import { useSignUp } from "@clerk/clerk-expo";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-    Animated,
-    Dimensions,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Animated, Dimensions, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from "react-native";
 
 const { height } = Dimensions.get("window");
