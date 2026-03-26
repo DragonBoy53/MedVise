@@ -1,19 +1,11 @@
 import { useOAuth, useSignIn } from "@clerk/clerk-expo";
+import { AntDesign } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AntDesign } from "@expo/vector-icons";
 import {
-  Animated,
-  Dimensions,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+  Animated, Dimensions, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput,
+  TouchableOpacity, View,
 } from "react-native";
 
 WebBrowser.maybeCompleteAuthSession();
