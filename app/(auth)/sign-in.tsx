@@ -137,7 +137,7 @@ export default function LoginScreen() {
       if (signInAttempt.status === "complete") {
         await setActive({ session: signInAttempt.createdSessionId });
         setLoading(false);
-        router.replace("/chat");
+        router.replace("/");
       } else {
         setLoading(false);
         setError("Login incomplete. Additional steps required.");
@@ -159,7 +159,7 @@ export default function LoginScreen() {
 
       if (createdSessionId) {
         setActive?.({ session: createdSessionId });
-        router.replace("/chat");
+        router.replace("/");
       }
     } catch (err) {
       console.error("OAuth error", err);
