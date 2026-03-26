@@ -60,20 +60,38 @@ def predict_thyroid(body: ThyroidInput):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# --- DIABETES ---
 class DiabetesInput(BaseModel):
-    pregnancies: int = 0
-    glucose: float = 0.0
-    blood_pressure: float = 0.0
-    skin_thickness: float = 0.0
-    insulin: float = 0.0
+    gender: str = "Female" 
+    age: float = 0.0
+    hypertension: int = 0
+    heart_disease: int = 0
+    smoking_history: str = "No Info"
     bmi: float = 0.0
-    dpf: float = 0.0
-    age: int = 0
+    HbA1c_level: float = 5.5
+    blood_glucose_level: float = 100.0
+    glucose: float = 0.0
 
 @app.post("/predict/diabetes")
 def predict_diabetes(body: DiabetesInput):
     try:
-        df = pd.DataFrame([body.dict()])
+        final_glucose = body.blood_glucose_level
+        if final_glucose == 100.0 and body.glucose != 0.0:
+            final_glucose = body.glucose
+            
+        data = {
+            "gender": body.gender,
+            "age": body.age,
+            "hypertension": body.hypertension,
+            "heart_disease": body.heart_disease,
+            "smoking_history": body.smoking_history,
+            "bmi": body.bmi,
+            "HbA1c_level": body.HbA1c_level,
+            "blood_glucose_level": int(final_glucose)
+        }
+        
+        df = pd.DataFrame([data])
+        
         pred = int(diabetes_model.predict(df)[0])
         proba = float(diabetes_model.predict_proba(df)[0][1])
 
@@ -81,7 +99,6 @@ def predict_diabetes(body: DiabetesInput):
         return {"prediction": pred, "label": label, "probability": round(proba, 4)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 class CardiologyInput(BaseModel):
     age: float = 0.0
     gender: int = 0

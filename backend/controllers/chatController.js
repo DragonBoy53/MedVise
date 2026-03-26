@@ -2,7 +2,7 @@ const fs = require("fs");
 const axios = require("axios");
 const { ai, SYSTEM_INSTRUCTION, tools } = require("../services/chatService");
 
-const MODEL_NAME = "gemini-2.5-flash";
+const MODEL_NAME = process.env.MODEL_NAME;
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL;
 
 async function runCardiologyModel(features) {
