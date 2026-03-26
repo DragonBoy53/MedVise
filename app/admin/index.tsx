@@ -213,7 +213,7 @@ export default function AdminDashboard() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* ── Profile Modal — identical to chat ── */}
+      {/* ── Profile Modal */}
       <Modal
         transparent
         visible={showProfile}

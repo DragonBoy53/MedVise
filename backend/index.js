@@ -6,6 +6,7 @@ const jwt = require("jsonwebtoken");
 const cors = require("cors");
 const multer = require("multer");
 const chatController = require("./controllers/chatController");
+const { backupController, recoveryController } = require("./controllers/adminController");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -76,10 +77,16 @@ app.post("/api/login", async (req, res) => {
 
 app.post("/api/chat", upload.single("image"), chatController);
 
+app.post("/api/admin/backup", backupController);
+
+app.post("/api/admin/recovery", recoveryController);
+
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
 }
+
+
 
 module.exports = app;
