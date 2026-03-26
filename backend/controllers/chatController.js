@@ -2,7 +2,7 @@ const fs = require("fs");
 const axios = require("axios");
 const { ai, SYSTEM_INSTRUCTION, tools } = require("../services/chatService");
 
-const MODEL_NAME = process.env.MODEL_NAME;
+const MODEL_NAME = process.env.MODEL_NAME || "gemini-2.5-flash";
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL;
 
 async function runCardiologyModel(features) {
@@ -43,73 +43,64 @@ async function chatController(req, res) {
 
   try {
     const message = req.body.message || "";
-    const userParts = [];
+    const promptText = message || (file ? "Please analyze this medical image." : "Hello");
 
-    // Attach image data if uploaded
+    let messagePayload;
+
+    // --- THE FIX ---
+    // The strict type checker demands raw strings for text. 
+    // Do NOT wrap text in { text: "..." }
     if (file) {
       const imageBuffer = fs.readFileSync(file.path);
-      userParts.push({
-        inlineData: {
-          mimeType: file.mimetype,
-          data: imageBuffer.toString("base64"),
+      messagePayload = [
+        {
+          inlineData: {
+            mimeType: file.mimetype,
+            data: imageBuffer.toString("base64"),
+          },
         },
-      });
+        promptText // Raw string directly in the array
+      ];
+    } else {
+      messagePayload = promptText; // Just a raw string!
     }
 
-    const promptText = message || (file ? "Please analyze this medical image." : "Hello");
-    userParts.push({ text: promptText });
-
-    let contents = [{ role: "user", parts: userParts }];
-
-    // Initial Request to Gemini
-    let response = await ai.models.generateContent({
+    const chat = ai.chats.create({
       model: MODEL_NAME,
       config: { systemInstruction: SYSTEM_INSTRUCTION, tools },
-      contents,
     });
 
+    // 1. Send the initial user message
+    let response = await chat.sendMessage({ message: messagePayload });
+
+    // 2. The Function Calling Loop
     let maxIterations = 3;
     while (maxIterations-- > 0) {
-      const candidate = response.candidates?.[0];
-      if (!candidate) break;
 
-      // Check if Gemini wants to call a function
-      const fcPart = candidate.content?.parts?.find((p) => p.functionCall);
-      if (!fcPart) break; // If no function call, exit loop
+      // The new SDK has a clean, built-in getter for function calls!
+      const functionCalls = response.functionCalls;
+      if (!functionCalls || functionCalls.length === 0) break; // Exit loop if no tools are called
 
-      const { name, args } = fcPart.functionCall;
+      const call = functionCalls[0];
+      const { name, args } = call;
       console.log(`[chatController] Tool called: ${name}`);
 
-      // Call the Python FastAPI Service
+      // Call your Python FastAPI Service
       const toolResult = await dispatchTool(name, args);
 
-      // Append interaction to conversation history
-      contents.push({
-        role: "model",
-        parts: [{ functionCall: { name, args } }]
-      });
-      contents.push({
-        role: "user",
-        parts: [{ functionResponse: { name, response: { result: toolResult } } }],
-      });
-
-      // Send the result back to Gemini to summarize
-      response = await ai.models.generateContent({
-        model: MODEL_NAME,
-        config: { systemInstruction: SYSTEM_INSTRUCTION, tools },
-        contents,
+      // 3. Send the ML result back to the chat session
+      response = await chat.sendMessage({
+        message: [{
+          functionResponse: {
+            name: name,
+            response: toolResult
+          }
+        }]
       });
     }
 
-    // Extract final text response
-    const replyText =
-      response.candidates?.[0]?.content?.parts
-        ?.filter((p) => p.text)
-        ?.map((p) => p.text)
-        ?.join("\n")
-        ?.trim() ||
-      response.text ||
-      "I'm sorry, I couldn't generate a response. Please try again.";
+    // Extract final text using the built-in SDK getter
+    const replyText = response.text || "I'm sorry, I couldn't generate a response. Please try again.";
 
     // Cleanup image upload
     if (file) {
