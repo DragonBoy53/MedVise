@@ -35,9 +35,10 @@ def health():
 
 from typing import Optional
 
+# --- THYROID ---
 class ThyroidInput(BaseModel):
-    age: int = 0
-    sex: int = 0
+    age: float = 0.0
+    sex: float = 0.0
     tsh: float = 0.0
     t3: float = 0.0
     tt4: float = 0.0
@@ -47,11 +48,49 @@ class ThyroidInput(BaseModel):
 @app.post("/predict/thyroid")
 def predict_thyroid(body: ThyroidInput):
     try:
-        df = pd.DataFrame([body.dict()])
-        pred = int(thyroid_model.predict(df)[0])
+        # We must map the 7 inputs to the exact 25 columns the XGBoost model expects!
+        data = {
+            "age": body.age,
+            "sex": body.sex,
+            "on thyroxine": 0,
+            "query on thyroxine": 0,
+            "on antithyroid medication": 0,
+            "sick": 0,
+            "pregnant": 0,
+            "thyroid surgery": 0,
+            "I131 treatment": 0,
+            "query hypothyroid": 0,
+            "query hyperthyroid": 0,
+            "lithium": 0,
+            "goitre": 0,
+            "tumor": 0,
+            "hypopituitary": 0,
+            "psych": 0,
+            "TSH measured": 1 if body.tsh != 0.0 else 0,
+            "TSH": body.tsh,
+            "T3 measured": 1 if body.t3 != 0.0 else 0, # The dataset only expects a boolean here!
+            "TT4 measured": 1 if body.tt4 != 0.0 else 0,
+            "TT4": body.tt4,
+            "T4U measured": 1 if body.t4u != 0.0 else 0,
+            "T4U": body.t4u,
+            "FTI measured": 1 if body.fti != 0.0 else 0,
+            "FTI": body.fti
+        }
+        
+        df = pd.DataFrame([data])
+        
+        # Scale the data if the user has uploaded the thyroid_scaler.pkl
+        try:
+            thyroid_scaler = joblib.load(MODELS_DIR / "thyroid_scaler.pkl")
+            X_input = thyroid_scaler.transform(df)
+        except Exception:
+            # Fallback if scaler isn't found (though predictions may be less accurate)
+            X_input = df
+
+        pred = int(thyroid_model.predict(X_input)[0])
 
         try:
-            proba = float(thyroid_model.predict_proba(df)[0][1])
+            proba = float(thyroid_model.predict_proba(X_input)[0][1])
         except:
             proba = 0.0
 
@@ -99,25 +138,42 @@ def predict_diabetes(body: DiabetesInput):
         return {"prediction": pred, "label": label, "probability": round(proba, 4)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# --- CARDIOLOGY ---
 class CardiologyInput(BaseModel):
     age: float = 0.0
-    gender: int = 0
-    height: float = 0.0
-    weight: float = 0.0
-    ap_hi: float = 0.0
-    ap_lo: float = 0.0
-    cholesterol: int = 1
-    gluc: int = 1
-    smoke: int = 0
-    alco: int = 0
-    active: int = 0
+    sex: int = 1
+    chest_pain_type: int = 4
+    resting_bp_s: float = 120.0
+    cholesterol: float = 200.0
+    fasting_blood_sugar: int = 0
+    resting_ecg: int = 0
+    max_heart_rate: float = 100.0
+    exercise_angina: int = 0
+    oldpeak: float = 0.0
+    st_slope: int = 2
 
-CARDIOLOGY_LABELS = {0: "Healthy", 1: "Mild Heart Disease", 2: "Severe Heart Disease"}
+CARDIOLOGY_LABELS = {0: "Healthy / No Disease", 1: "Mild Heart Disease", 2: "Severe Heart Disease"}
 
 @app.post("/predict/cardiology")
 def predict_cardiology(body: CardiologyInput):
     try:
-        df = pd.DataFrame([body.dict()])
+        # We MUST map these to the exact column strings found in your CSV
+        data = {
+            "age": body.age,
+            "sex": body.sex,
+            "chest pain type": body.chest_pain_type,
+            "resting bp s": body.resting_bp_s,
+            "cholesterol": body.cholesterol,
+            "fasting blood sugar": body.fasting_blood_sugar,
+            "resting ecg": body.resting_ecg,
+            "max heart rate": body.max_heart_rate,
+            "exercise angina": body.exercise_angina,
+            "oldpeak": body.oldpeak,
+            "ST slope": body.st_slope
+        }
+        
+        df = pd.DataFrame([data])
         X_scaled = cardiology_scaler.transform(df)
         pred = int(cardiology_model.predict(X_scaled)[0])
         probas = cardiology_model.predict_proba(X_scaled)[0].tolist()

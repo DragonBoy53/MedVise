@@ -36,27 +36,27 @@ const tools = [
     functionDeclarations: [
       {
         name: "predict_cardiology",
-        description: "Predicts cardiovascular disease risk. Call when a user reports cardiac symptoms or mentions heart-related lab values.",
+        description: "Predicts cardiovascular disease risk. Call when a user reports cardiac symptoms like chest pain, resting blood pressure, or max heart rate.",
         parameters: {
           type: "OBJECT",
           properties: {
             extracted_features: {
               type: "OBJECT",
-              description: "Features matching the CardiologyInput model.",
+              description: "Features matching the Cleveland/Statlog Heart Disease dataset.",
               properties: {
                 age: { type: "NUMBER", description: "Patient age in years." },
-                gender: { type: "INTEGER", description: "Gender: 1 = male, 2 = female, 0 = unknown." },
-                height: { type: "NUMBER", description: "Height in centimetres." },
-                weight: { type: "NUMBER", description: "Weight in kilograms." },
-                ap_hi: { type: "NUMBER", description: "Systolic blood pressure (mmHg)." },
-                ap_lo: { type: "NUMBER", description: "Diastolic blood pressure (mmHg)." },
-                cholesterol: { type: "INTEGER", description: "Cholesterol level: 1 = normal, 2 = above normal, 3 = well above normal." },
-                gluc: { type: "INTEGER", description: "Glucose level: 1 = normal, 2 = above normal, 3 = well above normal." },
-                smoke: { type: "INTEGER", description: "Smoking status: 1 = yes, 0 = no." },
-                alco: { type: "INTEGER", description: "Alcohol intake: 1 = yes, 0 = no." },
-                active: { type: "INTEGER", description: "Physical activity: 1 = yes, 0 = no." },
+                sex: { type: "INTEGER", description: "1 = male, 0 = female." },
+                chest_pain_type: { type: "INTEGER", description: "1: typical angina, 2: atypical angina, 3: non-anginal pain, 4: asymptomatic." },
+                resting_bp_s: { type: "NUMBER", description: "Resting systolic blood pressure (mm Hg)." },
+                cholesterol: { type: "NUMBER", description: "Serum cholesterol in mg/dl." },
+                fasting_blood_sugar: { type: "INTEGER", description: "1 if > 120 mg/dl, 0 if not." },
+                resting_ecg: { type: "INTEGER", description: "Resting electrocardiogram results (0, 1, or 2)." },
+                max_heart_rate: { type: "NUMBER", description: "Maximum heart rate achieved." },
+                exercise_angina: { type: "INTEGER", description: "Exercise induced angina (1 = yes, 0 = no)." },
+                oldpeak: { type: "NUMBER", description: "ST depression induced by exercise relative to rest." },
+                st_slope: { type: "INTEGER", description: "Slope of the peak exercise ST segment (1 = upsloping, 2 = flat, 3 = downsloping)." }
               },
-              required: ["age", "ap_hi", "ap_lo", "cholesterol"],
+              required: ["age", "sex", "resting_bp_s", "cholesterol", "max_heart_rate"],
             },
           },
           required: ["extracted_features"],
