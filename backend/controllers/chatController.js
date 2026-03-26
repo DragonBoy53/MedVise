@@ -6,19 +6,25 @@ const MODEL_NAME = "gemini-2.5-flash";
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL;
 
 async function runCardiologyModel(features) {
-  if (!ML_SERVICE_URL) throw new Error("ML_SERVICE_URL is not set.");
+  if (!ML_SERVICE_URL) {
+    return { error: "ML service not configured.", note: "ML_SERVICE_URL environment variable is not set." };
+  }
   const res = await axios.post(`${ML_SERVICE_URL}/predict/cardiology`, features, { timeout: 15000 });
   return res.data;
 }
 
 async function runDiabetesModel(features) {
-  if (!ML_SERVICE_URL) throw new Error("ML_SERVICE_URL is not set.");
+  if (!ML_SERVICE_URL) {
+    return { error: "ML service not configured.", note: "ML_SERVICE_URL environment variable is not set." };
+  }
   const res = await axios.post(`${ML_SERVICE_URL}/predict/diabetes`, features, { timeout: 15000 });
   return res.data;
 }
 
 async function runThyroidModel(features) {
-  if (!ML_SERVICE_URL) throw new Error("ML_SERVICE_URL is not set.");
+  if (!ML_SERVICE_URL) {
+    return { error: "ML service not configured.", note: "ML_SERVICE_URL environment variable is not set." };
+  }
   const res = await axios.post(`${ML_SERVICE_URL}/predict/thyroid`, features, { timeout: 15000 });
   return res.data;
 }
