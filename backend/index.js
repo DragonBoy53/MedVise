@@ -13,15 +13,15 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: false, 
+    rejectUnauthorized: false,
   },
 });
 
 const upload = multer({ dest: "/tmp" });
+
 app.post("/api/register", async (req, res) => {
   try {
     const { fullName, email, password, role } = req.body;
@@ -74,12 +74,12 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-
 app.post("/api/chat", upload.single("image"), chatController);
+
 if (require.main === module) {
-    app.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
-    });
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
 }
 
 module.exports = app;

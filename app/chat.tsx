@@ -4,8 +4,22 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-  Alert, Animated, Dimensions, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, StatusBar,
-  StyleSheet, Text, TextInput, TouchableOpacity, View,
+  Alert,
+  Animated,
+  Dimensions,
+  Easing,
+  FlatList,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import Markdown from "react-native-markdown-display";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -61,7 +75,7 @@ export default function ChatScreen() {
             useNativeDriver: true,
           }),
         ]),
-      ])
+      ]),
     ).start();
   }, []);
 
@@ -131,7 +145,8 @@ export default function ChatScreen() {
 
   const pickImage = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
         Alert.alert("Permission Required", "We need access to your photos.");
         return;
@@ -169,7 +184,9 @@ export default function ChatScreen() {
   };
 
   const renderMessage = ({ item }: { item: Message }) => (
-    <View style={[styles.message, item.fromUser ? styles.userMsg : styles.botMsg]}>
+    <View
+      style={[styles.message, item.fromUser ? styles.userMsg : styles.botMsg]}
+    >
       {item.imageUri && (
         <Image source={{ uri: item.imageUri }} style={styles.sentImage} />
       )}
@@ -198,7 +215,10 @@ export default function ChatScreen() {
             ]}
           />
           <Animated.View style={{ transform: [{ scale: centerScale }] }}>
-            <TouchableOpacity onPress={handleCenterPress} style={styles.centerBtn}>
+            <TouchableOpacity
+              onPress={handleCenterPress}
+              style={styles.centerBtn}
+            >
               <FontAwesome5 name="plus" size={36} color="#000" />
             </TouchableOpacity>
           </Animated.View>
@@ -232,7 +252,10 @@ export default function ChatScreen() {
           <View style={styles.bottomWrapper}>
             {selectedImage && (
               <View style={styles.previewContainer}>
-                <Image source={{ uri: selectedImage }} style={styles.previewImage} />
+                <Image
+                  source={{ uri: selectedImage }}
+                  style={styles.previewImage}
+                />
                 <TouchableOpacity
                   style={styles.removePreviewBtn}
                   onPress={() => setSelectedImage(null)}
@@ -283,7 +306,6 @@ export default function ChatScreen() {
         </View>
       </KeyboardAvoidingView>
 
-     
       <Modal
         transparent={true}
         visible={showAttachMenu}
@@ -326,7 +348,10 @@ export default function ChatScreen() {
               style={styles.attachOption}
               onPress={() => {
                 setShowAttachMenu(false);
-                Alert.alert("Coming Soon", "Document scanner is under maintenance.");
+                Alert.alert(
+                  "Coming Soon",
+                  "Document scanner is under maintenance.",
+                );
               }}
             >
               <View style={[styles.optionIcon, { backgroundColor: "#F3E5F5" }]}>
@@ -341,14 +366,27 @@ export default function ChatScreen() {
   );
 }
 
-function UserAvatar({ url, initials, size }: { url: string; initials: string; size: number }) {
+function UserAvatar({
+  url,
+  initials,
+  size,
+}: {
+  url: string;
+  initials: string;
+  size: number;
+}) {
   const [failed, setFailed] = useState(false);
   const radius = size / 2;
   if (url && !failed) {
     return (
       <Image
         source={{ uri: url }}
-        style={{ width: size, height: size, borderRadius: radius, backgroundColor: "#ddd" }}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: radius,
+          backgroundColor: "#ddd",
+        }}
         onError={() => {
           console.log("Avatar load failed for:", url);
           setFailed(true);
@@ -358,8 +396,19 @@ function UserAvatar({ url, initials, size }: { url: string; initials: string; si
     );
   }
   return (
-    <View style={{ width: size, height: size, borderRadius: radius, backgroundColor: "#111", alignItems: "center", justifyContent: "center" }}>
-      <Text style={{ color: "#fff", fontSize: size * 0.35, fontWeight: "700" }}>{initials}</Text>
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: radius,
+        backgroundColor: "#111",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Text style={{ color: "#fff", fontSize: size * 0.35, fontWeight: "700" }}>
+        {initials}
+      </Text>
     </View>
   );
 }
@@ -376,15 +425,33 @@ function TopBar() {
   const openProfile = () => {
     setShowProfile(true);
     Animated.parallel([
-      Animated.spring(fadeAnim, { toValue: 1, useNativeDriver: true, friction: 9, tension: 80 }),
-      Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, friction: 9, tension: 80 }),
+      Animated.spring(fadeAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        friction: 9,
+        tension: 80,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        friction: 9,
+        tension: 80,
+      }),
     ]).start();
   };
 
   const closeProfile = () => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 0, duration: 160, useNativeDriver: true }),
-      Animated.timing(scaleAnim, { toValue: 0.88, duration: 160, useNativeDriver: true }),
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 160,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 0.88,
+        duration: 160,
+        useNativeDriver: true,
+      }),
     ]).start(() => setShowProfile(false));
   };
 
@@ -400,20 +467,25 @@ function TopBar() {
     }, 200);
   };
 
-  const fullName  = user?.fullName || "";
+  const fullName = user?.fullName || "";
   const firstName = user?.firstName || "";
-  const lastName  = user?.lastName || "";
-  const email     = user?.primaryEmailAddress?.emailAddress || "";
-  const phone     = user?.primaryPhoneNumber?.phoneNumber || null;
-  const username  = user?.username || null;
-  const role      = (user?.unsafeMetadata?.role as string) || null;
+  const lastName = user?.lastName || "";
+  const email = user?.primaryEmailAddress?.emailAddress || "";
+  const phone = user?.primaryPhoneNumber?.phoneNumber || null;
+  const username = user?.username || null;
+  const role = (user?.unsafeMetadata?.role as string) || null;
+  const isAdmin = role === "admin";
   const createdAt = user?.createdAt
     ? new Date(user.createdAt).toLocaleDateString("en-US", {
-        year: "numeric", month: "long", day: "numeric",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
       })
     : null;
   // Get Google profile photo directly from externalAccounts if available
-  const googleAccount = user?.externalAccounts?.find((a) => a.provider === "google");
+  const googleAccount = user?.externalAccounts?.find(
+    (a) => a.provider === "google",
+  );
   const googlePhoto = googleAccount?.imageUrl || null;
   // Clerk imageUrl works for Google signups — use it directly with a cache-bust
   const clerkPhoto = user?.imageUrl || null;
@@ -422,15 +494,31 @@ function TopBar() {
     clerkPhoto ||
     `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName || email || "U")}&background=111111&color=fff&size=128&bold=true&format=png`;
   const displayName = fullName || email || "MedVise User";
-  const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || email.charAt(0).toUpperCase() || "U";
+  const initials =
+    `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() ||
+    email.charAt(0).toUpperCase() ||
+    "U";
 
   return (
     <>
       {/* ── Navigation bar ── */}
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => router.push("/settings")} style={{ width: 40 }}>
-  <Ionicons name="settings-outline" size={22} color="#444" />
-</TouchableOpacity>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          {isAdmin && (
+            <TouchableOpacity
+              onPress={() => router.replace("/admin" as any)}
+              style={{ marginRight: 4 }}
+            >
+              <Ionicons name="arrow-back" size={22} color="#444" />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            onPress={() => router.push("/settings")}
+            style={{ width: 40 }}
+          >
+            <Ionicons name="settings-outline" size={22} color="#444" />
+          </TouchableOpacity>
+        </View>
         <Text style={styles.title}>MedVise</Text>
         <TouchableOpacity onPress={openProfile} activeOpacity={0.75}>
           <UserAvatar url={avatarUrl} initials={initials} size={36} />
@@ -453,10 +541,7 @@ function TopBar() {
               { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
             ]}
           >
-          
             <TouchableOpacity activeOpacity={1}>
-
-             
               <View style={profileStyles.header}>
                 <View style={profileStyles.avatarWrap}>
                   <UserAvatar url={avatarUrl} initials={initials} size={72} />
@@ -471,20 +556,23 @@ function TopBar() {
                   ) : null}
                   <View style={profileStyles.badgeRow}>
                     {role ? (
-                      <View style={[
-                        profileStyles.badge,
-                        { backgroundColor: "#f0f0f0" },
-                      ]}>
-                        <Text style={[
-                          profileStyles.badgeText,
-                          { color: "#111" },
-                        ]}>
+                      <View
+                        style={[
+                          profileStyles.badge,
+                          { backgroundColor: "#f0f0f0" },
+                        ]}
+                      >
+                        <Text
+                          style={[profileStyles.badgeText, { color: "#111" }]}
+                        >
                           {role.charAt(0).toUpperCase() + role.slice(1)}
                         </Text>
                       </View>
                     ) : (
                       <View style={profileStyles.badge}>
-                        <Text style={profileStyles.badgeText}>MedVise User</Text>
+                        <Text style={profileStyles.badgeText}>
+                          MedVise User
+                        </Text>
                       </View>
                     )}
                   </View>
@@ -493,20 +581,31 @@ function TopBar() {
 
               <View style={profileStyles.divider} />
 
-            
               <View style={profileStyles.infoSection}>
                 {email ? (
                   <View style={profileStyles.infoRow}>
-                    <View style={[profileStyles.infoIconWrap, { backgroundColor: "#f0f0f0" }]}>
+                    <View
+                      style={[
+                        profileStyles.infoIconWrap,
+                        { backgroundColor: "#f0f0f0" },
+                      ]}
+                    >
                       <Ionicons name="mail-outline" size={15} color="#444" />
                     </View>
-                    <Text style={profileStyles.infoText} numberOfLines={1}>{email}</Text>
+                    <Text style={profileStyles.infoText} numberOfLines={1}>
+                      {email}
+                    </Text>
                   </View>
                 ) : null}
 
                 {phone ? (
                   <View style={profileStyles.infoRow}>
-                    <View style={[profileStyles.infoIconWrap, { backgroundColor: "#f5f5f5" }]}>
+                    <View
+                      style={[
+                        profileStyles.infoIconWrap,
+                        { backgroundColor: "#f5f5f5" },
+                      ]}
+                    >
                       <Ionicons name="call-outline" size={15} color="#444" />
                     </View>
                     <Text style={profileStyles.infoText}>{phone}</Text>
@@ -515,36 +614,58 @@ function TopBar() {
 
                 {firstName && lastName ? (
                   <View style={profileStyles.infoRow}>
-                    <View style={[profileStyles.infoIconWrap, { backgroundColor: "#f5f5f5" }]}>
+                    <View
+                      style={[
+                        profileStyles.infoIconWrap,
+                        { backgroundColor: "#f5f5f5" },
+                      ]}
+                    >
                       <Ionicons name="person-outline" size={15} color="#444" />
                     </View>
-                    <Text style={profileStyles.infoText}>{firstName} {lastName}</Text>
+                    <Text style={profileStyles.infoText}>
+                      {firstName} {lastName}
+                    </Text>
                   </View>
                 ) : null}
 
                 {createdAt ? (
                   <View style={profileStyles.infoRow}>
-                    <View style={[profileStyles.infoIconWrap, { backgroundColor: "#f5f5f5" }]}>
-                      <Ionicons name="calendar-outline" size={15} color="#444" />
+                    <View
+                      style={[
+                        profileStyles.infoIconWrap,
+                        { backgroundColor: "#f5f5f5" },
+                      ]}
+                    >
+                      <Ionicons
+                        name="calendar-outline"
+                        size={15}
+                        color="#444"
+                      />
                     </View>
-                    <Text style={profileStyles.infoText}>Member since {createdAt}</Text>
+                    <Text style={profileStyles.infoText}>
+                      Member since {createdAt}
+                    </Text>
                   </View>
                 ) : null}
               </View>
 
               <View style={profileStyles.divider} />
 
-          
               <View style={profileStyles.actions}>
-                <TouchableOpacity style={profileStyles.closeBtn} onPress={closeProfile}>
+                <TouchableOpacity
+                  style={profileStyles.closeBtn}
+                  onPress={closeProfile}
+                >
                   <Text style={profileStyles.closeBtnText}>Close</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={profileStyles.signOutBtn} onPress={handleSignOut}>
+                <TouchableOpacity
+                  style={profileStyles.signOutBtn}
+                  onPress={handleSignOut}
+                >
                   <Ionicons name="log-out-outline" size={16} color="#fff" />
                   <Text style={profileStyles.signOutText}>Sign Out</Text>
                 </TouchableOpacity>
               </View>
-
             </TouchableOpacity>
           </Animated.View>
         </TouchableOpacity>
