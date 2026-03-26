@@ -4,22 +4,8 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-  Alert,
-  Animated,
-  Dimensions,
-  Easing,
-  FlatList,
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+  Alert, Animated, Dimensions, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Platform,
+  StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from "react-native";
 import Markdown from "react-native-markdown-display";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -232,10 +218,13 @@ export default function ChatScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <TopBar />
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
+    
+        <KeyboardAvoidingView
+  style={{ flex: 1 }}
+  behavior={Platform.OS === "ios" ? "padding" : "height"}
+  keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+>
+      
         <View style={styles.container}>
           <FlatList
             inverted
