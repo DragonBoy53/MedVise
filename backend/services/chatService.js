@@ -3,7 +3,6 @@ const { GoogleGenAI } = require("@google/genai");
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// ─── System Instruction ──────────────────────────────────────────────────────
 const SYSTEM_INSTRUCTION = `
 You are MedVise Assistant — an AI-powered medical support companion built into the MedVise platform.
 
@@ -32,34 +31,33 @@ You are MedVise Assistant — an AI-powered medical support companion built into
 - After receiving tool results, interpret them for the patient in plain language and include the medical disclaimer.
 `.trim();
 
-// ─── Tool Declarations ────────────────────────────────────────────────────────
 const tools = [
   {
     functionDeclarations: [
       {
         name: "predict_cardiology",
         description:
-          "Predicts cardiovascular disease risk using clinical features extracted from the patient's description. Call this when the user reports cardiac symptoms such as chest pain, shortness of breath, palpitations, or irregular heartbeat.",
+          "Predicts cardiovascular disease risk. Call when a user reports cardiac symptoms: chest pain, shortness of breath, palpitations, high blood pressure, or mentions heart-related lab values.",
         parameters: {
           type: "object",
           properties: {
             extracted_features: {
               type: "object",
-              description:
-                "Clinical features required for the cardiology ML model, based on the UCI Heart Disease dataset.",
+              description: "Features matching the CardiologyInput Pydantic model in the ML service.",
               properties: {
-                age:                    { type: "number", description: "Patient age in years." },
-                sex:                    { type: "number", description: "Sex: 1 = male, 0 = female." },
-                chest_pain_type:        { type: "number", description: "Chest pain type: 0=typical angina, 1=atypical angina, 2=non-anginal pain, 3=asymptomatic." },
-                resting_bp:             { type: "number", description: "Resting blood pressure in mmHg." },
-                cholesterol:            { type: "number", description: "Serum cholesterol in mg/dL." },
-                fasting_blood_sugar:    { type: "number", description: "Fasting blood sugar > 120 mg/dL: 1 = true, 0 = false." },
-                resting_ecg:            { type: "number", description: "Resting ECG results: 0=normal, 1=ST-T wave abnormality, 2=left ventricular hypertrophy." },
-                max_heart_rate:         { type: "number", description: "Maximum heart rate achieved during exercise." },
-                exercise_induced_angina:{ type: "number", description: "Exercise induced angina: 1 = yes, 0 = no." },
-                st_depression:          { type: "number", description: "ST depression induced by exercise relative to rest." },
+                age:         { type: "number", description: "Patient age in years." },
+                gender:      { type: "number", description: "Gender: 1 = male, 0 = female." },
+                height:      { type: "number", description: "Height in centimetres." },
+                weight:      { type: "number", description: "Weight in kilograms." },
+                ap_hi:       { type: "number", description: "Systolic blood pressure (mmHg)." },
+                ap_lo:       { type: "number", description: "Diastolic blood pressure (mmHg)." },
+                cholesterol: { type: "number", description: "Cholesterol level: 1 = normal, 2 = above normal, 3 = well above normal." },
+                gluc:        { type: "number", description: "Glucose level: 1 = normal, 2 = above normal, 3 = well above normal." },
+                smoke:       { type: "number", description: "Smoking status: 1 = yes, 0 = no." },
+                alco:        { type: "number", description: "Alcohol intake: 1 = yes, 0 = no." },
+                active:      { type: "number", description: "Physical activity: 1 = yes, 0 = no." },
               },
-              required: ["age", "sex", "chest_pain_type", "resting_bp", "cholesterol", "max_heart_rate"],
+              required: ["age", "gender", "ap_hi", "ap_lo", "cholesterol"],
             },
           },
           required: ["extracted_features"],
@@ -69,23 +67,22 @@ const tools = [
       {
         name: "predict_diabetes",
         description:
-          "Predicts diabetes risk using clinical features extracted from the patient's description. Call this when the user reports symptoms such as extreme thirst, frequent urination, sudden weight loss, blurred vision, or mentions high blood glucose levels.",
+          "Predicts diabetes risk. Call when a user reports extreme thirst, frequent urination, sudden weight loss, blurred vision, high blood glucose, or mentions insulin/glucose lab values.",
         parameters: {
           type: "object",
           properties: {
             extracted_features: {
               type: "object",
-              description:
-                "Clinical features required for the diabetes ML model, based on the PIMA Indian Diabetes dataset.",
+              description: "Features matching the DiabetesInput Pydantic model in the ML service (PIMA dataset).",
               properties: {
-                pregnancies:              { type: "number", description: "Number of times pregnant (0 for males)." },
-                glucose:                  { type: "number", description: "Plasma glucose concentration (mg/dL), from a 2-hour oral glucose tolerance test." },
-                blood_pressure:           { type: "number", description: "Diastolic blood pressure in mmHg." },
-                skin_thickness:           { type: "number", description: "Triceps skinfold thickness in mm." },
-                insulin:                  { type: "number", description: "2-hour serum insulin in µU/mL." },
-                bmi:                      { type: "number", description: "Body Mass Index (weight in kg / height in m²)." },
-                diabetes_pedigree_function: { type: "number", description: "Diabetes pedigree function — a score of genetic diabetes risk based on family history." },
-                age:                      { type: "number", description: "Patient age in years." },
+                pregnancies:     { type: "number", description: "Number of times pregnant (use 0 for males)." },
+                glucose:         { type: "number", description: "Plasma glucose concentration in mg/dL (2-hour oral glucose tolerance test)." },
+                blood_pressure:  { type: "number", description: "Diastolic blood pressure in mmHg." },
+                skin_thickness:  { type: "number", description: "Triceps skinfold thickness in mm." },
+                insulin:         { type: "number", description: "2-hour serum insulin in µU/mL." },
+                bmi:             { type: "number", description: "Body Mass Index (kg/m²)." },
+                dpf:             { type: "number", description: "Diabetes Pedigree Function — genetic diabetes risk score based on family history." },
+                age:             { type: "number", description: "Patient age in years." },
               },
               required: ["glucose", "bmi", "age"],
             },
@@ -97,25 +94,21 @@ const tools = [
       {
         name: "predict_thyroid",
         description:
-          "Predicts thyroid disorder risk (hypothyroid, hyperthyroid, or normal) using clinical and lab features extracted from the patient's description. Call this when the user reports fatigue, unexplained weight changes, hair loss, cold/heat intolerance, neck swelling, or mentions abnormal TSH/T3/T4 values.",
+          "Predicts thyroid disease risk. Call when a user reports fatigue, unexplained weight gain/loss, hair loss, cold/heat intolerance, neck swelling, or mentions abnormal TSH/T3/T4 lab values.",
         parameters: {
           type: "object",
           properties: {
             extracted_features: {
               type: "object",
-              description:
-                "Clinical and laboratory features required for the thyroid ML model.",
+              description: "Features matching the ThyroidInput Pydantic model in the ML service.",
               properties: {
-                age:          { type: "number",  description: "Patient age in years." },
-                sex:          { type: "string",  description: "Patient sex: 'M' or 'F'." },
-                on_thyroxine: { type: "boolean", description: "Whether the patient is currently on thyroxine medication." },
-                tsh:          { type: "number",  description: "Thyroid Stimulating Hormone level (mIU/L)." },
-                t3:           { type: "number",  description: "Triiodothyronine (T3) level (nmol/L)." },
-                tt4:          { type: "number",  description: "Total Thyroxine (TT4) level (nmol/L)." },
-                t4u:          { type: "number",  description: "T4 uptake ratio." },
-                fti:          { type: "number",  description: "Free Thyroxine Index (FTI)." },
-                goitre:       { type: "boolean", description: "Whether the patient has a goitre." },
-                tumor:        { type: "boolean", description: "Whether a thyroid tumor has been noted." },
+                age: { type: "number", description: "Patient age in years." },
+                sex: { type: "number", description: "Sex: 1 = male, 0 = female." },
+                tsh: { type: "number", description: "Thyroid Stimulating Hormone level (mIU/L). Normal range: 0.4 – 4.0." },
+                t3:  { type: "number", description: "Triiodothyronine (T3) level (nmol/L). Normal: 1.2 – 2.7." },
+                tt4: { type: "number", description: "Total Thyroxine (TT4) level (nmol/L). Normal: 64 – 154." },
+                t4u: { type: "number", description: "T4 Uptake ratio. Normal: 0.7 – 1.05." },
+                fti: { type: "number", description: "Free Thyroxine Index (FTI). Normal: 63 – 150." },
               },
               required: ["age", "sex", "tsh"],
             },
@@ -127,5 +120,4 @@ const tools = [
   },
 ];
 
-// ─── Exports ──────────────────────────────────────────────────────────────────
 module.exports = { ai, SYSTEM_INSTRUCTION, tools };
