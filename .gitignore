@@ -4,6 +4,9 @@ backend/.env
 # dependencies
 node_modules/
 
+#sfdx
+.sfdx/
+
 # Expo
 .expo/
 dist/
