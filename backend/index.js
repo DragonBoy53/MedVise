@@ -1,24 +1,18 @@
 require("dotenv").config();
 const express = require("express");
-const { Pool } = require("pg");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
 const multer = require("multer");
+const pool = require("./db/pool");
 const chatController = require("./controllers/chatController");
+const adminRoutes = require("./routes/adminRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false,
-  },
-});
 
 const upload = multer({ dest: "/tmp" });
 
@@ -75,6 +69,7 @@ app.post("/api/login", async (req, res) => {
 });
 
 app.post("/api/chat", upload.single("image"), chatController);
+app.use("/api/admin", adminRoutes);
 
 if (require.main === module) {
   app.listen(PORT, () => {
