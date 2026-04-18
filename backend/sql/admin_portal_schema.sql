@@ -160,7 +160,10 @@ CREATE TABLE IF NOT EXISTS prediction_events (
   model_version_id BIGINT REFERENCES model_versions(id) ON DELETE SET NULL,
   specialty TEXT NOT NULL,
   predicted_label TEXT NOT NULL,
+  predicted_value INTEGER,
   probabilities_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  input_payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  response_payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
   latency_ms INTEGER,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -169,10 +172,31 @@ CREATE TABLE IF NOT EXISTS prediction_ground_truth (
   id BIGSERIAL PRIMARY KEY,
   prediction_event_id BIGINT NOT NULL REFERENCES prediction_events(id) ON DELETE CASCADE,
   actual_label TEXT NOT NULL,
+  actual_value INTEGER,
   label_source TEXT,
   entered_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE prediction_events
+  ADD COLUMN IF NOT EXISTS predicted_value INTEGER,
+  ADD COLUMN IF NOT EXISTS input_payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS response_payload_json JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE prediction_ground_truth
+  ADD COLUMN IF NOT EXISTS actual_value INTEGER;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'prediction_ground_truth_prediction_event_id_key'
+  ) THEN
+    ALTER TABLE prediction_ground_truth
+      ADD CONSTRAINT prediction_ground_truth_prediction_event_id_key UNIQUE (prediction_event_id);
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS metric_snapshots (
   id BIGSERIAL PRIMARY KEY,

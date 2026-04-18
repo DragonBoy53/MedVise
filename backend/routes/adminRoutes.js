@@ -36,5 +36,6 @@ router.post("/backup", adminController.createBackup);
 router.post("/recovery", adminController.createRecovery);
 router.get("/chat-logs", adminController.listChatLogs);
 router.post("/chat-logs/:id/retraining", adminController.queueRetrainingFeedback);
+router.post("/predictions/:id/ground-truth", adminController.upsertPredictionGroundTruth);
 
 module.exports = router;

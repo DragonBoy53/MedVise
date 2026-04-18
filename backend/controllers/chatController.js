@@ -1,6 +1,10 @@
 const fs = require("fs");
 const axios = require("axios");
 const { ai, SYSTEM_INSTRUCTION, tools } = require("../services/chatService");
+const {
+  createPredictionEvent,
+  getSpecialtyFromToolName,
+} = require("../services/telemetryService");
 
 const MODEL_NAME = process.env.MODEL_NAME;
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL;
@@ -86,7 +90,23 @@ async function chatController(req, res) {
       console.log(`[chatController] Tool called: ${name}`);
 
       // Call your Python FastAPI Service
+      const toolStartTime = Date.now();
       const toolResult = await dispatchTool(name, args);
+      const latencyMs = Date.now() - toolStartTime;
+      const specialty = getSpecialtyFromToolName(name);
+
+      if (specialty && !toolResult?.error) {
+        try {
+          await createPredictionEvent({
+            specialty,
+            extractedFeatures: args?.extracted_features || args,
+            toolResult,
+            latencyMs,
+          });
+        } catch (telemetryError) {
+          console.error("[chatController] Telemetry logging failed:", telemetryError);
+        }
+      }
 
       // 3. Send the ML result back to the chat session
       response = await chat.sendMessage({

@@ -55,7 +55,7 @@ async function verifyTwoFactorChallenge(req, res) {
 
 async function getMetricsOverview(req, res) {
   try {
-    const metrics = await adminService.getMetricsOverview();
+    const metrics = await adminService.getMetricsOverview(req.query.specialty);
     res.json(metrics);
   } catch (error) {
     console.error("[adminController.getMetricsOverview]", error);
@@ -175,6 +175,45 @@ async function queueRetrainingFeedback(req, res) {
   }
 }
 
+async function upsertPredictionGroundTruth(req, res) {
+  try {
+    const { id } = req.params;
+    const { actualValue, actualLabel, labelSource } = req.body;
+
+    if (![0, 1, 2].includes(Number(actualValue))) {
+      return res.status(400).json({
+        message:
+          "actualValue is required and must be 0, 1, or 2. Use 0/1 for diabetes and thyroid, 0/1/2 for cardiology.",
+      });
+    }
+
+    const record = await adminService.upsertPredictionGroundTruth({
+      predictionEventId: Number(id),
+      actualValue: Number(actualValue),
+      actualLabel,
+      labelSource,
+      enteredBy: req.auth.localUserId || null,
+    });
+
+    return res.status(201).json({
+      message: "Ground-truth outcome saved successfully.",
+      record,
+    });
+  } catch (error) {
+    console.error("[adminController.upsertPredictionGroundTruth]", error);
+    if (error.code === "SCHEMA_NOT_READY") {
+      return res.status(503).json({
+        message:
+          "Admin database schema is not installed yet. Run backend/sql/admin_portal_schema.sql first.",
+      });
+    }
+    if (error.code === "PREDICTION_NOT_FOUND") {
+      return res.status(404).json({ message: "Prediction event not found." });
+    }
+    return res.status(500).json({ message: "Failed to save ground-truth outcome." });
+  }
+}
+
 module.exports = {
   getAdminDashboard,
   setupTwoFactor,
@@ -186,4 +225,5 @@ module.exports = {
   createRecovery,
   listChatLogs,
   queueRetrainingFeedback,
+  upsertPredictionGroundTruth,
 };
