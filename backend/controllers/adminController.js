@@ -69,6 +69,12 @@ async function listBackups(req, res) {
     res.json({ items: backups });
   } catch (error) {
     console.error("[adminController.listBackups]", error);
+    if (error.code === "SCHEMA_NOT_READY") {
+      return res.status(503).json({
+        message:
+          "Admin database schema is not installed yet. Run backend/sql/admin_portal_schema.sql first.",
+      });
+    }
     res.status(500).json({ message: "Failed to load backup jobs." });
   }
 }
@@ -82,6 +88,12 @@ async function createBackup(req, res) {
     });
   } catch (error) {
     console.error("[adminController.createBackup]", error);
+    if (error.code === "SCHEMA_NOT_READY") {
+      return res.status(503).json({
+        message:
+          "Admin database schema is not installed yet. Run backend/sql/admin_portal_schema.sql first.",
+      });
+    }
     res.status(500).json({ message: "Failed to queue backup job." });
   }
 }
@@ -89,10 +101,6 @@ async function createBackup(req, res) {
 async function createRecovery(req, res) {
   try {
     const { backupJobId, targetEnv = "staging" } = req.body;
-
-    if (!backupJobId) {
-      return res.status(400).json({ message: "backupJobId is required." });
-    }
 
     const job = await adminService.createRecoveryJob(
       req.auth.localUserId || null,
@@ -107,6 +115,12 @@ async function createRecovery(req, res) {
     });
   } catch (error) {
     console.error("[adminController.createRecovery]", error);
+    if (error.code === "SCHEMA_NOT_READY") {
+      return res.status(503).json({
+        message:
+          "Admin database schema is not installed yet. Run backend/sql/admin_portal_schema.sql first.",
+      });
+    }
     if (error.code === "NO_BACKUP_AVAILABLE") {
       return res.status(400).json({
         message:
@@ -125,6 +139,12 @@ async function listChatLogs(req, res) {
     res.json({ items: logs });
   } catch (error) {
     console.error("[adminController.listChatLogs]", error);
+    if (error.code === "SCHEMA_NOT_READY") {
+      return res.status(503).json({
+        message:
+          "Admin database schema is not installed yet. Run backend/sql/admin_portal_schema.sql first.",
+      });
+    }
     res.status(500).json({ message: "Failed to load chat logs." });
   }
 }
@@ -145,6 +165,12 @@ async function queueRetrainingFeedback(req, res) {
     });
   } catch (error) {
     console.error("[adminController.queueRetrainingFeedback]", error);
+    if (error.code === "SCHEMA_NOT_READY") {
+      return res.status(503).json({
+        message:
+          "Admin database schema is not installed yet. Run backend/sql/admin_portal_schema.sql first.",
+      });
+    }
     res.status(500).json({ message: "Failed to queue retraining feedback." });
   }
 }
