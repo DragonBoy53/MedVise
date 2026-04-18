@@ -1,3 +1,4 @@
+import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -20,27 +21,56 @@ type Metrics = {
 };
 
 export default function MetricsScreen() {
+  const { getToken, isLoaded, isSignedIn } = useAuth();
   const router = useRouter();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchMetrics = async () => {
+    if (!isLoaded) {
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const res = await apiClient.get("/api/admin/metrics");
+      if (!isSignedIn) {
+        throw new Error("You must sign in before accessing admin data.");
+      }
+
+      const token = await getToken();
+      if (!token) {
+        throw new Error("No Clerk session token was available for this request.");
+      }
+
+      const res = await apiClient.get("/api/admin/metrics", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
       setMetrics(res.data);
-    } catch (e) {
-      setError("Could not load metrics. Make sure the backend is running.");
+    } catch (e: any) {
+      const status = e?.response?.status;
+      if (status === 401) {
+        setError("Admin API rejected the request. Make sure the backend has CLERK_SECRET_KEY configured on Vercel.");
+      } else if (status === 403) {
+        setError("Admin access is authenticated, but MFA is still required by the backend.");
+      } else {
+        setError(
+          e?.message || "Could not load metrics. Make sure the backend is running.",
+        );
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchMetrics();
-  }, []);
+    if (isLoaded) {
+      fetchMetrics();
+    }
+  }, [isLoaded, isSignedIn]);
 
   return (
     <SafeAreaView style={styles.safe}>

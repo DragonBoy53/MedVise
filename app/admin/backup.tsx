@@ -1,3 +1,4 @@
+import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -21,10 +22,40 @@ type LogEntry = {
 };
 
 export default function BackupScreen() {
+  const { getToken, isLoaded, isSignedIn } = useAuth();
   const router = useRouter();
   const [backupLoading, setBackupLoading] = useState(false);
   const [recoveryLoading, setRecoveryLoading] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+
+  const getAuthHeaders = async () => {
+    if (!isLoaded || !isSignedIn) {
+      throw new Error("You must sign in before using admin actions.");
+    }
+
+    const token = await getToken();
+    if (!token) {
+      throw new Error("No Clerk session token was available for this request.");
+    }
+
+    return {
+      Authorization: `Bearer ${token}`,
+    };
+  };
+
+  const getRequestErrorMessage = (error: any, fallback: string) => {
+    const status = error?.response?.status;
+
+    if (status === 401) {
+      return "Request was rejected by the admin API. Add CLERK_SECRET_KEY to Vercel backend environment variables.";
+    }
+
+    if (status === 403) {
+      return "Request is authenticated but blocked by MFA enforcement on the backend.";
+    }
+
+    return error?.message || fallback;
+  };
 
   const addLog = (message: string, type: LogEntry["type"] = "info") => {
     const time = new Date().toLocaleTimeString();
@@ -43,13 +74,17 @@ export default function BackupScreen() {
             setBackupLoading(true);
             addLog("Backup initiated...", "info");
             try {
-              const res = await apiClient.post("/api/admin/backup");
+              const headers = await getAuthHeaders();
+              const res = await apiClient.post("/api/admin/backup", {}, { headers });
               addLog(
                 res.data.message || "Backup completed successfully.",
                 "success",
               );
-            } catch (e) {
-              addLog("Backup failed. Check server logs.", "error");
+            } catch (e: any) {
+              addLog(
+                getRequestErrorMessage(e, "Backup failed. Check server logs."),
+                "error",
+              );
             } finally {
               setBackupLoading(false);
             }
@@ -72,13 +107,21 @@ export default function BackupScreen() {
             setRecoveryLoading(true);
             addLog("Recovery initiated...", "info");
             try {
-              const res = await apiClient.post("/api/admin/recovery");
+              const headers = await getAuthHeaders();
+              const res = await apiClient.post(
+                "/api/admin/recovery",
+                { targetEnv: "staging" },
+                { headers },
+              );
               addLog(
                 res.data.message || "Recovery completed successfully.",
                 "success",
               );
-            } catch (e) {
-              addLog("Recovery failed. Check server logs.", "error");
+            } catch (e: any) {
+              addLog(
+                getRequestErrorMessage(e, "Recovery failed. Check server logs."),
+                "error",
+              );
             } finally {
               setRecoveryLoading(false);
             }

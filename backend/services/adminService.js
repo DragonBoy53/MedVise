@@ -104,6 +104,25 @@ async function createBackupJob(initiatedBy) {
 }
 
 async function createRecoveryJob(initiatedBy, backupJobId, targetEnv) {
+  let effectiveBackupJobId = backupJobId;
+
+  if (!effectiveBackupJobId) {
+    const latestBackupResult = await pool.query(`
+      SELECT id
+      FROM backup_jobs
+      ORDER BY created_at DESC
+      LIMIT 1
+    `);
+
+    effectiveBackupJobId = latestBackupResult.rows[0]?.id || null;
+  }
+
+  if (!effectiveBackupJobId) {
+    const error = new Error("No backup job is available yet.");
+    error.code = "NO_BACKUP_AVAILABLE";
+    throw error;
+  }
+
   const result = await pool.query(
     `
       INSERT INTO recovery_jobs (backup_job_id, initiated_by, status, target_env, confirmed_at)
@@ -116,7 +135,7 @@ async function createRecoveryJob(initiatedBy, backupJobId, targetEnv) {
         target_env AS "targetEnv",
         created_at AS "createdAt"
     `,
-    [backupJobId, initiatedBy, targetEnv],
+    [effectiveBackupJobId, initiatedBy, targetEnv],
   );
 
   return result.rows[0];

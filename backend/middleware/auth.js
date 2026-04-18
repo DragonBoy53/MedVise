@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const { createClerkClient, verifyToken } = require("@clerk/backend");
 
 function extractBearerToken(req) {
   const header = req.headers.authorization || "";
@@ -9,20 +10,104 @@ function extractBearerToken(req) {
   return header.slice("Bearer ".length);
 }
 
-function requireAuth(req, res, next) {
-  const token = extractBearerToken(req);
+function isMfaEnforced() {
+  return String(process.env.ADMIN_MFA_ENFORCED).toLowerCase() === "true";
+}
 
-  if (!token) {
-    return res.status(401).json({ message: "Authentication required." });
+function getClerkClient() {
+  if (!process.env.CLERK_SECRET_KEY) {
+    return null;
+  }
+
+  return createClerkClient({
+    secretKey: process.env.CLERK_SECRET_KEY,
+    publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+  });
+}
+
+async function tryLocalJwt(token) {
+  try {
+    return jwt.verify(token, process.env.JWT_SECRET);
+  } catch (error) {
+    return null;
+  }
+}
+
+async function tryClerkToken(token) {
+  if (!process.env.CLERK_SECRET_KEY) {
+    return null;
   }
 
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    req.auth = payload;
-    return next();
+    const verifiedToken = await verifyToken(token, {
+      secretKey: process.env.CLERK_SECRET_KEY,
+      jwtKey: process.env.CLERK_JWT_KEY,
+    });
+
+    const clerkUserId = verifiedToken.sub;
+    if (!clerkUserId) {
+      return null;
+    }
+
+    const clerkClient = getClerkClient();
+    const clerkUser = clerkClient ? await clerkClient.users.getUser(clerkUserId) : null;
+
+    const role =
+      clerkUser?.publicMetadata?.role ||
+      clerkUser?.unsafeMetadata?.role ||
+      "user";
+
+    return {
+      id: null,
+      clerkUserId,
+      email:
+        clerkUser?.primaryEmailAddress?.emailAddress ||
+        verifiedToken.email ||
+        null,
+      role,
+      mfaVerified: !isMfaEnforced(),
+      authProvider: "clerk",
+      sessionId: verifiedToken.sid || null,
+      tokenType: "clerk_session",
+    };
   } catch (error) {
-    return res.status(401).json({ message: "Invalid or expired token." });
+    return null;
   }
+}
+
+async function requireAuth(req, res, next) {
+  const token = extractBearerToken(req);
+
+  if (!token) {
+    return res.status(401).json({
+      message: "Authentication required. Send a Bearer token.",
+    });
+  }
+
+  const localPayload = await tryLocalJwt(token);
+  if (localPayload) {
+    req.auth = {
+      ...localPayload,
+      localUserId: localPayload.id || null,
+      clerkUserId: localPayload.clerkUserId || null,
+      email: localPayload.email || null,
+      mfaVerified: localPayload.mfaVerified || !isMfaEnforced(),
+      authProvider: "local_jwt",
+      tokenType: "local_jwt",
+    };
+    return next();
+  }
+
+  const clerkPayload = await tryClerkToken(token);
+  if (clerkPayload) {
+    req.auth = clerkPayload;
+    return next();
+  }
+
+  return res.status(401).json({
+    message:
+      "Invalid or expired token. For Clerk-based sessions, make sure CLERK_SECRET_KEY is configured on the backend.",
+  });
 }
 
 function requireRole(...allowedRoles) {
@@ -45,7 +130,7 @@ function requireAdminMfa(req, res, next) {
     return res.status(403).json({ message: "Admin access required." });
   }
 
-  if (!mfaVerified) {
+  if (isMfaEnforced() && !mfaVerified) {
     return res.status(403).json({
       message: "Two-factor authentication verification is required.",
       code: "MFA_REQUIRED",

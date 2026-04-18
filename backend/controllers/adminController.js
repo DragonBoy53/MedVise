@@ -2,7 +2,9 @@ const adminService = require("../services/adminService");
 
 async function getAdminDashboard(req, res) {
   try {
-    const summary = await adminService.getAdminSummary(req.auth.id);
+    const summary = await adminService.getAdminSummary(
+      req.auth.localUserId || req.auth.clerkUserId || req.auth.id,
+    );
     res.json(summary);
   } catch (error) {
     console.error("[adminController.getAdminDashboard]", error);
@@ -73,7 +75,7 @@ async function listBackups(req, res) {
 
 async function createBackup(req, res) {
   try {
-    const job = await adminService.createBackupJob(req.auth.id);
+    const job = await adminService.createBackupJob(req.auth.localUserId || null);
     res.status(202).json({
       message: "Backup job queued. Attach a worker to run pg_dump and upload the artifact.",
       job,
@@ -93,7 +95,7 @@ async function createRecovery(req, res) {
     }
 
     const job = await adminService.createRecoveryJob(
-      req.auth.id,
+      req.auth.localUserId || null,
       backupJobId,
       targetEnv,
     );
@@ -105,6 +107,12 @@ async function createRecovery(req, res) {
     });
   } catch (error) {
     console.error("[adminController.createRecovery]", error);
+    if (error.code === "NO_BACKUP_AVAILABLE") {
+      return res.status(400).json({
+        message:
+          "No backup job exists yet. Run a backup first, then retry recovery.",
+      });
+    }
     res.status(500).json({ message: "Failed to queue recovery job." });
   }
 }
@@ -127,7 +135,7 @@ async function queueRetrainingFeedback(req, res) {
     const { notes } = req.body;
     const record = await adminService.queueRetrainingFeedback(
       chatSessionId,
-      req.auth.id,
+      req.auth.localUserId || null,
       notes,
     );
 
