@@ -45,6 +45,7 @@
       "reactCompiler": true
     },
     "extra": {
+      "clerkPublishableKey": "pk_test_YXNzdXJlZC1maWxseS0xNi5jbGVyay5hY2NvdW50cy5kZXYk",
       "eas": {
         "projectId": "15a87f60-bdfa-4695-ae40-2f71ffc7657a"
       }

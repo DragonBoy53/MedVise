@@ -198,6 +198,24 @@ BEGIN
   END IF;
 END $$;
 
+CREATE TABLE IF NOT EXISTS model_baseline_metrics (
+  id BIGSERIAL PRIMARY KEY,
+  model_version_id BIGINT NOT NULL REFERENCES model_versions(id) ON DELETE CASCADE,
+  accuracy NUMERIC(6, 5),
+  precision NUMERIC(6, 5),
+  recall NUMERIC(6, 5),
+  false_alarm_rate NUMERIC(6, 5),
+  roc_auc NUMERIC(6, 5),
+  evaluation_sample_size INTEGER,
+  metric_scope TEXT NOT NULL DEFAULT 'test_set',
+  class_metrics_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  confusion_matrix_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  source_note TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (model_version_id)
+);
+
 CREATE TABLE IF NOT EXISTS metric_snapshots (
   id BIGSERIAL PRIMARY KEY,
   model_version_id BIGINT REFERENCES model_versions(id) ON DELETE SET NULL,
@@ -232,6 +250,9 @@ CREATE INDEX IF NOT EXISTS idx_chat_reviews_session_created_at
 
 CREATE INDEX IF NOT EXISTS idx_prediction_events_created_at
   ON prediction_events(created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_model_baseline_metrics_model_version_id
+  ON model_baseline_metrics(model_version_id);
 
 CREATE INDEX IF NOT EXISTS idx_metric_snapshots_window_end
   ON metric_snapshots(window_end DESC, created_at DESC);

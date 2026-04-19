@@ -3,33 +3,69 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-    Modal,
-    Pressable,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Modal,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import apiClient from "../../api/client";
 
-type Metrics = {
-  specialty: string | null;
-  modelName: string | null;
-  versionTag: string | null;
-  accuracy: number;
-  precision: number;
-  recall: number;
-  falseAlarmRate: number;
+type ClassMetric = {
+  precision?: number | null;
+  recall?: number | null;
+  support?: number | null;
+};
+
+type BaselineMetrics = {
+  accuracy: number | null;
+  precision: number | null;
+  recall: number | null;
+  falseAlarmRate: number | null;
+  rocAuc: number | null;
+  sampleSize: number;
+  metricScope: string | null;
+  classMetrics: Record<string, ClassMetric>;
+  confusionMatrix: Record<string, number>;
+  updatedAt: string | null;
+  note?: string | null;
+  schemaReady?: boolean;
+};
+
+type LiveMetrics = {
+  accuracy: number | null;
+  precision: number | null;
+  recall: number | null;
+  falseAlarmRate: number | null;
   totalPredictions: number;
   sampleSize: number;
   windowStart: string | null;
   windowEnd: string | null;
   lastUpdated: string | null;
-  note?: string;
+  note?: string | null;
   schemaReady?: boolean;
+};
+
+type MetricsResponse = {
+  specialty: string | null;
+  modelName: string | null;
+  versionTag: string | null;
+  baseline?: BaselineMetrics;
+  live?: LiveMetrics;
+  accuracy?: number | null;
+  precision?: number | null;
+  recall?: number | null;
+  falseAlarmRate?: number | null;
+  totalPredictions?: number;
+  sampleSize?: number;
+  windowStart?: string | null;
+  windowEnd?: string | null;
+  lastUpdated?: string | null;
+  note?: string | null;
 };
 
 const MODEL_OPTIONS = [
@@ -40,10 +76,73 @@ const MODEL_OPTIONS = [
 
 type ModelKey = (typeof MODEL_OPTIONS)[number]["key"];
 
+const DEFAULT_BASELINE_METRICS: BaselineMetrics = {
+  accuracy: null,
+  precision: null,
+  recall: null,
+  falseAlarmRate: null,
+  rocAuc: null,
+  sampleSize: 0,
+  metricScope: null,
+  classMetrics: {},
+  confusionMatrix: {},
+  updatedAt: null,
+  note: "Baseline metrics are not available yet for this model response.",
+  schemaReady: true,
+};
+
+const DEFAULT_LIVE_METRICS: LiveMetrics = {
+  accuracy: null,
+  precision: null,
+  recall: null,
+  falseAlarmRate: null,
+  totalPredictions: 0,
+  sampleSize: 0,
+  windowStart: null,
+  windowEnd: null,
+  lastUpdated: null,
+  note: "Live metrics are not available yet for this model response.",
+  schemaReady: true,
+};
+
+function normalizeMetricsResponse(payload: any): MetricsResponse {
+  if (!payload) {
+    return {
+      specialty: null,
+      modelName: null,
+      versionTag: null,
+      baseline: DEFAULT_BASELINE_METRICS,
+      live: DEFAULT_LIVE_METRICS,
+    };
+  }
+
+  const legacyLiveShape: LiveMetrics = {
+    accuracy: payload.accuracy ?? null,
+    precision: payload.precision ?? null,
+    recall: payload.recall ?? null,
+    falseAlarmRate: payload.falseAlarmRate ?? null,
+    totalPredictions: payload.totalPredictions ?? 0,
+    sampleSize: payload.sampleSize ?? 0,
+    windowStart: payload.windowStart ?? null,
+    windowEnd: payload.windowEnd ?? null,
+    lastUpdated: payload.lastUpdated ?? null,
+    note: payload.note ?? DEFAULT_LIVE_METRICS.note,
+    schemaReady: payload.schemaReady ?? true,
+  };
+
+  return {
+    specialty: payload.specialty ?? null,
+    modelName: payload.modelName ?? null,
+    versionTag: payload.versionTag ?? null,
+    baseline: payload.baseline ?? DEFAULT_BASELINE_METRICS,
+    live: payload.live ?? legacyLiveShape,
+  };
+}
+
 export default function MetricsScreen() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const router = useRouter();
-  const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [metrics, setMetrics] = useState<MetricsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<ModelKey>("cardiology");
@@ -56,6 +155,7 @@ export default function MetricsScreen() {
 
     setLoading(true);
     setError(null);
+
     try {
       if (!isSignedIn) {
         throw new Error("You must sign in before accessing admin data.");
@@ -74,16 +174,23 @@ export default function MetricsScreen() {
           Authorization: `Bearer ${token}`,
         },
       });
-      setMetrics(res.data);
+
+      setMetrics(normalizeMetricsResponse(res.data));
     } catch (e: any) {
       const status = e?.response?.status;
       if (status === 401) {
-        setError("Admin API rejected the request. Make sure the backend has CLERK_SECRET_KEY configured on Vercel.");
+        setError(
+          "Admin API rejected the request. Make sure the backend has CLERK_SECRET_KEY configured on Vercel.",
+        );
       } else if (status === 403) {
-        setError("Admin access is authenticated, but MFA is still required by the backend.");
+        setError(
+          "Admin access is authenticated, but MFA is still required by the backend.",
+        );
       } else {
         setError(
-          e?.message || "Could not load metrics. Make sure the backend is running.",
+          e?.response?.data?.message ||
+            e?.message ||
+            "Could not load metrics. Make sure the backend is running.",
         );
       }
     } finally {
@@ -100,8 +207,13 @@ export default function MetricsScreen() {
   const selectedModelOption =
     MODEL_OPTIONS.find((option) => option.key === selectedModel) || MODEL_OPTIONS[0];
 
-  const formatPercent = (value: number) => `${(value * 100).toFixed(1)}%`;
-  const formatDate = (value: string | null) =>
+  const formatPercent = (value: number | null | undefined) =>
+    value == null ? "N/A" : `${(value * 100).toFixed(1)}%`;
+
+  const formatNumber = (value: number | null | undefined) =>
+    value == null ? "N/A" : value.toLocaleString();
+
+  const formatDate = (value: string | null | undefined) =>
     value
       ? new Date(value).toLocaleString("en-US", {
           month: "short",
@@ -111,6 +223,17 @@ export default function MetricsScreen() {
           minute: "2-digit",
         })
       : "N/A";
+
+  const formatClassLabel = (value: string) =>
+    value
+      .replace(/([A-Z])/g, " $1")
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (match) => match.toUpperCase())
+      .trim();
+
+  const baseline = metrics?.baseline ?? DEFAULT_BASELINE_METRICS;
+  const live = metrics?.live ?? DEFAULT_LIVE_METRICS;
+  const classMetricEntries = Object.entries(baseline.classMetrics || {});
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -146,21 +269,19 @@ export default function MetricsScreen() {
 
         {loading && <Text style={styles.statusText}>Loading metrics...</Text>}
 
-        {error && (
+        {error ? (
           <View style={styles.errorBox}>
             <Ionicons name="warning-outline" size={20} color="#FF9500" />
             <Text style={styles.errorText}>{error}</Text>
           </View>
-        )}
+        ) : null}
 
-        {metrics && (
+        {metrics ? (
           <>
-            <Text style={styles.sectionLabel}>Live Stats</Text>
-
             <View style={styles.summaryCard}>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryTitle}>
-                  {selectedModelOption.label} Metrics
+                  {selectedModelOption.label} Performance Dashboard
                 </Text>
                 <View style={styles.summaryBadge}>
                   <Text style={styles.summaryBadgeText}>
@@ -174,31 +295,45 @@ export default function MetricsScreen() {
               <Text style={styles.summaryMeta}>
                 Version: {metrics.versionTag || "Not available"}
               </Text>
-              <Text style={styles.summaryMeta}>
-                Evaluation window: {formatDate(metrics.windowStart)} to{" "}
-                {formatDate(metrics.windowEnd)}
+            </View>
+
+            <Text style={styles.sectionLabel}>Baseline Test-Set Metrics</Text>
+
+            <View style={styles.metricPanel}>
+              <Text style={styles.panelTitle}>Notebook Evaluation Snapshot</Text>
+              <Text style={styles.panelMeta}>
+                Scope: {baseline.metricScope || "Not available"}
+              </Text>
+              <Text style={styles.panelMeta}>
+                Updated: {formatDate(baseline.updatedAt)}
               </Text>
             </View>
 
             <View style={styles.row}>
               <View style={[styles.statCard, { borderTopColor: "#34C759" }]}>
-                <Text style={styles.statValue}>{formatPercent(metrics.accuracy)}</Text>
+                <Text style={styles.statValue}>
+                  {formatPercent(baseline.accuracy)}
+                </Text>
                 <Text style={styles.statLabel}>Accuracy</Text>
               </View>
               <View style={[styles.statCard, { borderTopColor: "#4A90E2" }]}>
-                <Text style={styles.statValue}>{formatPercent(metrics.precision)}</Text>
+                <Text style={styles.statValue}>
+                  {formatPercent(baseline.precision)}
+                </Text>
                 <Text style={styles.statLabel}>Precision</Text>
               </View>
             </View>
 
             <View style={styles.row}>
               <View style={[styles.statCard, { borderTopColor: "#AF52DE" }]}>
-                <Text style={styles.statValue}>{formatPercent(metrics.recall)}</Text>
+                <Text style={styles.statValue}>
+                  {formatPercent(baseline.recall)}
+                </Text>
                 <Text style={styles.statLabel}>Recall</Text>
               </View>
               <View style={[styles.statCard, { borderTopColor: "#FF3B30" }]}>
                 <Text style={styles.statValue}>
-                  {formatPercent(metrics.falseAlarmRate)}
+                  {formatPercent(baseline.falseAlarmRate)}
                 </Text>
                 <Text style={styles.statLabel}>False Alarm Rate</Text>
               </View>
@@ -207,30 +342,104 @@ export default function MetricsScreen() {
             <View style={styles.row}>
               <View style={[styles.statCard, { borderTopColor: "#222" }]}>
                 <Text style={styles.statValue}>
-                  {metrics.totalPredictions.toLocaleString()}
+                  {formatNumber(baseline.sampleSize)}
+                </Text>
+                <Text style={styles.statLabel}>Evaluation Sample</Text>
+              </View>
+              <View style={[styles.statCard, { borderTopColor: "#FF9500" }]}>
+                <Text style={styles.statValue}>
+                  {formatPercent(baseline.rocAuc)}
+                </Text>
+                <Text style={styles.statLabel}>ROC-AUC</Text>
+              </View>
+            </View>
+
+            {baseline.note ? (
+              <View style={styles.noteBox}>
+                <Ionicons name="information-circle-outline" size={18} color="#1565C0" />
+                <Text style={styles.noteText}>{baseline.note}</Text>
+              </View>
+            ) : null}
+
+            {classMetricEntries.length ? (
+              <View style={styles.classMetricsCard}>
+                <Text style={styles.classMetricsTitle}>Class-Level Detail</Text>
+                {classMetricEntries.map(([key, value]) => (
+                  <View key={key} style={styles.classMetricRow}>
+                    <Text style={styles.classMetricName}>{formatClassLabel(key)}</Text>
+                    <Text style={styles.classMetricValue}>
+                      P {formatPercent(value.precision)} | R {formatPercent(value.recall)} | S{" "}
+                      {formatNumber(value.support)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            <Text style={styles.sectionLabel}>Live Production Metrics</Text>
+
+            <View style={styles.metricPanel}>
+              <Text style={styles.panelTitle}>Real App Predictions</Text>
+              <Text style={styles.panelMeta}>
+                Evaluation window: {formatDate(live.windowStart)} to{" "}
+                {formatDate(live.windowEnd)}
+              </Text>
+              <Text style={styles.panelMeta}>
+                Last updated: {formatDate(live.lastUpdated)}
+              </Text>
+            </View>
+
+            <View style={styles.row}>
+              <View style={[styles.statCard, { borderTopColor: "#34C759" }]}>
+                <Text style={styles.statValue}>
+                  {formatPercent(live.accuracy)}
+                </Text>
+                <Text style={styles.statLabel}>Accuracy</Text>
+              </View>
+              <View style={[styles.statCard, { borderTopColor: "#4A90E2" }]}>
+                <Text style={styles.statValue}>
+                  {formatPercent(live.precision)}
+                </Text>
+                <Text style={styles.statLabel}>Precision</Text>
+              </View>
+            </View>
+
+            <View style={styles.row}>
+              <View style={[styles.statCard, { borderTopColor: "#AF52DE" }]}>
+                <Text style={styles.statValue}>{formatPercent(live.recall)}</Text>
+                <Text style={styles.statLabel}>Recall</Text>
+              </View>
+              <View style={[styles.statCard, { borderTopColor: "#FF3B30" }]}>
+                <Text style={styles.statValue}>
+                  {formatPercent(live.falseAlarmRate)}
+                </Text>
+                <Text style={styles.statLabel}>False Alarm Rate</Text>
+              </View>
+            </View>
+
+            <View style={styles.row}>
+              <View style={[styles.statCard, { borderTopColor: "#222" }]}>
+                <Text style={styles.statValue}>
+                  {live.totalPredictions.toLocaleString()}
                 </Text>
                 <Text style={styles.statLabel}>Total Predictions</Text>
               </View>
               <View style={[styles.statCard, { borderTopColor: "#FF9500" }]}>
                 <Text style={styles.statValue}>
-                  {metrics.sampleSize.toLocaleString()}
+                  {live.sampleSize.toLocaleString()}
                 </Text>
-                <Text style={styles.statLabel}>Sample Size</Text>
+                <Text style={styles.statLabel}>Labeled Cases</Text>
               </View>
             </View>
 
-            {metrics.note ? (
+            {live.note ? (
               <View style={styles.noteBox}>
                 <Ionicons name="information-circle-outline" size={18} color="#1565C0" />
-                <Text style={styles.noteText}>{metrics.note}</Text>
+                <Text style={styles.noteText}>{live.note}</Text>
               </View>
             ) : null}
-
-            <Text style={styles.updatedText}>
-              Last updated: {formatDate(metrics.lastUpdated)}
-            </Text>
           </>
-        )}
+        ) : null}
       </ScrollView>
 
       <Modal
@@ -254,10 +463,7 @@ export default function MetricsScreen() {
               return (
                 <TouchableOpacity
                   key={option.key}
-                  style={[
-                    styles.modalOption,
-                    isActive && styles.modalOptionActive,
-                  ]}
+                  style={[styles.modalOption, isActive && styles.modalOptionActive]}
                   onPress={() => {
                     setSelectedModel(option.key);
                     setShowModelModal(false);
@@ -370,7 +576,18 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 1,
+    marginTop: 8,
   },
+  metricPanel: {
+    backgroundColor: "#fafafa",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 0.5,
+    borderColor: "#ececec",
+    gap: 4,
+  },
+  panelTitle: { color: "#111", fontSize: 15, fontWeight: "700" },
+  panelMeta: { color: "#666", fontSize: 12, lineHeight: 18 },
   row: { flexDirection: "row", gap: 14 },
   statCard: {
     flex: 1,
@@ -399,12 +616,22 @@ const styles = StyleSheet.create({
     borderColor: "#cfe3ff",
   },
   noteText: { color: "#24507a", fontSize: 13, flex: 1, lineHeight: 18 },
-  updatedText: {
-    color: "#bbb",
-    fontSize: 11,
-    textAlign: "center",
-    marginTop: 8,
+  classMetricsCard: {
+    backgroundColor: "#f8f8fb",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 0.5,
+    borderColor: "#ececf4",
+    gap: 10,
   },
+  classMetricsTitle: { color: "#111", fontSize: 15, fontWeight: "700" },
+  classMetricRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  classMetricName: { color: "#222", fontSize: 13, fontWeight: "600", flex: 1 },
+  classMetricValue: { color: "#666", fontSize: 12, flex: 1, textAlign: "right" },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.45)",

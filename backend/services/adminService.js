@@ -1,4 +1,5 @@
 const pool = require("../db/pool");
+const { ensureModelVersion } = require("./telemetryService");
 const VALID_SPECIALTIES = ["cardiology", "diabetes", "thyroid"];
 
 function isUndefinedTableError(error) {
@@ -13,22 +14,13 @@ function normalizeSpecialty(input) {
   return VALID_SPECIALTIES.includes(value) ? value : null;
 }
 
-function buildDefaultMetricsPayload(specialty, modelVersion, note, schemaReady = true) {
+function buildMetricsResponse(specialty, modelVersion, baseline, live) {
   return {
     specialty: specialty || modelVersion?.specialty || null,
     modelName: modelVersion?.model_name || null,
     versionTag: modelVersion?.version_tag || null,
-    accuracy: 0,
-    precision: 0,
-    recall: 0,
-    falseAlarmRate: 0,
-    totalPredictions: 0,
-    sampleSize: 0,
-    windowStart: null,
-    windowEnd: null,
-    lastUpdated: null,
-    note,
-    schemaReady,
+    baseline,
+    live,
   };
 }
 
@@ -73,10 +65,256 @@ function buildMetricFilter({ specialty, modelVersion }) {
 
 function toRate(numerator, denominator) {
   if (!denominator) {
-    return 0;
+    return null;
   }
 
   return Number((numerator / denominator).toFixed(5));
+}
+
+function toNumberOrNull(value) {
+  if (value == null) {
+    return null;
+  }
+
+  const numericValue = Number(value);
+  return Number.isNaN(numericValue) ? null : numericValue;
+}
+
+function buildDefaultBaselineMetrics(note, schemaReady = true) {
+  return {
+    accuracy: null,
+    precision: null,
+    recall: null,
+    falseAlarmRate: null,
+    rocAuc: null,
+    sampleSize: 0,
+    metricScope: null,
+    classMetrics: {},
+    confusionMatrix: {},
+    updatedAt: null,
+    note,
+    schemaReady,
+  };
+}
+
+function buildDefaultLiveMetrics(note, schemaReady = true) {
+  return {
+    accuracy: null,
+    precision: null,
+    recall: null,
+    falseAlarmRate: null,
+    totalPredictions: 0,
+    sampleSize: 0,
+    windowStart: null,
+    windowEnd: null,
+    lastUpdated: null,
+    note,
+    schemaReady,
+  };
+}
+
+async function getBaselineMetrics(modelVersionId) {
+  if (!modelVersionId) {
+    return buildDefaultBaselineMetrics(
+      "No active model version has been registered yet for this specialty.",
+    );
+  }
+
+  try {
+    const result = await pool.query(
+      `
+        SELECT
+          accuracy,
+          precision,
+          recall,
+          false_alarm_rate AS "falseAlarmRate",
+          roc_auc AS "rocAuc",
+          evaluation_sample_size AS "sampleSize",
+          metric_scope AS "metricScope",
+          class_metrics_json AS "classMetrics",
+          confusion_matrix_json AS "confusionMatrix",
+          source_note AS "note",
+          updated_at AS "updatedAt"
+        FROM model_baseline_metrics
+        WHERE model_version_id = $1
+        LIMIT 1
+      `,
+      [modelVersionId],
+    );
+
+    const row = result.rows[0];
+    if (!row) {
+      return buildDefaultBaselineMetrics(
+        "Baseline notebook metrics have not been attached to this model version yet.",
+      );
+    }
+
+    return {
+      accuracy: toNumberOrNull(row.accuracy),
+      precision: toNumberOrNull(row.precision),
+      recall: toNumberOrNull(row.recall),
+      falseAlarmRate: toNumberOrNull(row.falseAlarmRate),
+      rocAuc: toNumberOrNull(row.rocAuc),
+      sampleSize: row.sampleSize || 0,
+      metricScope: row.metricScope || null,
+      classMetrics: row.classMetrics || {},
+      confusionMatrix: row.confusionMatrix || {},
+      updatedAt: row.updatedAt || null,
+      note: row.note || null,
+      schemaReady: true,
+    };
+  } catch (error) {
+    if (isUndefinedTableError(error)) {
+      return buildDefaultBaselineMetrics(
+        "Baseline metrics table is not installed yet. Run backend/sql/admin_portal_schema.sql against PostgreSQL.",
+        false,
+      );
+    }
+
+    throw error;
+  }
+}
+
+async function getLiveMetrics({ specialty, modelVersion }) {
+  const { params, whereClause } = buildMetricFilter({
+    specialty,
+    modelVersion,
+  });
+
+  const totalPredictionsResult = await pool.query(
+    `
+      SELECT
+        COUNT(*)::int AS total_predictions,
+        MIN(pe.created_at) AS window_start,
+        MAX(pe.created_at) AS window_end
+      FROM prediction_events pe
+      ${whereClause}
+    `,
+    params,
+  );
+
+  const totalPredictions = totalPredictionsResult.rows[0]?.total_predictions || 0;
+  const windowStart = totalPredictionsResult.rows[0]?.window_start || null;
+  const windowEnd = totalPredictionsResult.rows[0]?.window_end || null;
+
+  if (!totalPredictions) {
+    return {
+      ...buildDefaultLiveMetrics(
+        specialty
+          ? `No real prediction events found yet for ${specialty}. Live metrics will appear after users start generating predictions.`
+          : "No real prediction events found yet. Live metrics will appear after users start generating predictions.",
+      ),
+      totalPredictions,
+      windowStart,
+      windowEnd,
+    };
+  }
+
+  const labeledMetricsResult = await pool.query(
+    `
+      SELECT
+        COUNT(*)::int AS sample_size,
+        COUNT(*) FILTER (
+          WHERE
+            (
+              CASE
+                WHEN LOWER(pe.specialty) = 'cardiology' THEN COALESCE(pe.predicted_value, 0) > 0
+                ELSE COALESCE(pe.predicted_value, 0) = 1
+              END
+            )
+            AND
+            (
+              CASE
+                WHEN LOWER(pe.specialty) = 'cardiology' THEN COALESCE(pgt.actual_value, 0) > 0
+                ELSE COALESCE(pgt.actual_value, 0) = 1
+              END
+            )
+        )::int AS tp,
+        COUNT(*) FILTER (
+          WHERE
+            (
+              CASE
+                WHEN LOWER(pe.specialty) = 'cardiology' THEN COALESCE(pe.predicted_value, 0) > 0
+                ELSE COALESCE(pe.predicted_value, 0) = 1
+              END
+            )
+            AND NOT (
+              CASE
+                WHEN LOWER(pe.specialty) = 'cardiology' THEN COALESCE(pgt.actual_value, 0) > 0
+                ELSE COALESCE(pgt.actual_value, 0) = 1
+              END
+            )
+        )::int AS fp,
+        COUNT(*) FILTER (
+          WHERE NOT (
+              CASE
+                WHEN LOWER(pe.specialty) = 'cardiology' THEN COALESCE(pe.predicted_value, 0) > 0
+                ELSE COALESCE(pe.predicted_value, 0) = 1
+              END
+            )
+            AND
+            (
+              CASE
+                WHEN LOWER(pe.specialty) = 'cardiology' THEN COALESCE(pgt.actual_value, 0) > 0
+                ELSE COALESCE(pgt.actual_value, 0) = 1
+              END
+            )
+        )::int AS fn,
+        COUNT(*) FILTER (
+          WHERE NOT (
+              CASE
+                WHEN LOWER(pe.specialty) = 'cardiology' THEN COALESCE(pe.predicted_value, 0) > 0
+                ELSE COALESCE(pe.predicted_value, 0) = 1
+              END
+            )
+            AND NOT (
+              CASE
+                WHEN LOWER(pe.specialty) = 'cardiology' THEN COALESCE(pgt.actual_value, 0) > 0
+                ELSE COALESCE(pgt.actual_value, 0) = 1
+              END
+            )
+        )::int AS tn,
+        MAX(pgt.created_at) AS last_labeled_at
+      FROM prediction_events pe
+      INNER JOIN prediction_ground_truth pgt ON pgt.prediction_event_id = pe.id
+      ${whereClause}
+    `,
+    params,
+  );
+
+  const labeledMetrics = labeledMetricsResult.rows[0];
+  const sampleSize = labeledMetrics?.sample_size || 0;
+  const tp = labeledMetrics?.tp || 0;
+  const fp = labeledMetrics?.fp || 0;
+  const fn = labeledMetrics?.fn || 0;
+  const tn = labeledMetrics?.tn || 0;
+
+  if (!sampleSize) {
+    return {
+      ...buildDefaultLiveMetrics(
+        "Predictions are being recorded, but no verified ground-truth outcomes have been submitted yet. Accuracy, precision, recall, and false alarm rate require actual confirmed outcomes.",
+      ),
+      totalPredictions,
+      sampleSize,
+      windowStart,
+      windowEnd,
+      lastUpdated: windowEnd,
+    };
+  }
+
+  return {
+    accuracy: toRate(tp + tn, sampleSize),
+    precision: toRate(tp, tp + fp),
+    recall: toRate(tp, tp + fn),
+    falseAlarmRate: toRate(fp, fp + tn),
+    totalPredictions,
+    sampleSize,
+    windowStart,
+    windowEnd,
+    lastUpdated: labeledMetrics?.last_labeled_at || windowEnd,
+    note: null,
+    schemaReady: true,
+  };
 }
 
 async function getAdminSummary(userId) {
@@ -99,152 +337,29 @@ async function getMetricsOverview(specialtyInput) {
   const specialty = normalizeSpecialty(specialtyInput);
 
   try {
-    const activeModelVersion = await getActiveModelVersion(specialty);
-    const { params, whereClause } = buildMetricFilter({
-      specialty,
-      modelVersion: activeModelVersion,
-    });
+    const activeModelVersion = specialty
+      ? await ensureModelVersion(specialty)
+      : await getActiveModelVersion(specialty);
 
-    const totalPredictionsResult = await pool.query(
-      `
-        SELECT
-          COUNT(*)::int AS total_predictions,
-          MIN(pe.created_at) AS window_start,
-          MAX(pe.created_at) AS window_end
-        FROM prediction_events pe
-        ${whereClause}
-      `,
-      params,
-    );
+    const [baseline, live] = await Promise.all([
+      getBaselineMetrics(activeModelVersion?.id || null),
+      getLiveMetrics({ specialty, modelVersion: activeModelVersion }),
+    ]);
 
-    const totalPredictions = totalPredictionsResult.rows[0]?.total_predictions || 0;
-    const windowStart = totalPredictionsResult.rows[0]?.window_start || null;
-    const windowEnd = totalPredictionsResult.rows[0]?.window_end || null;
-
-    if (!totalPredictions) {
-      return buildDefaultMetricsPayload(
-        specialty,
-        activeModelVersion,
-        specialty
-          ? `No real prediction events found yet for ${specialty}. Metrics will appear after users start generating predictions.`
-          : "No real prediction events found yet. Metrics will appear after users start generating predictions.",
-      );
-    }
-
-    const labeledMetricsResult = await pool.query(
-      `
-        SELECT
-          COUNT(*)::int AS sample_size,
-          COUNT(*) FILTER (
-            WHERE
-              (
-                CASE
-                  WHEN LOWER(pe.specialty) = 'cardiology' THEN COALESCE(pe.predicted_value, 0) > 0
-                  ELSE COALESCE(pe.predicted_value, 0) = 1
-                END
-              )
-              AND
-              (
-                CASE
-                  WHEN LOWER(pe.specialty) = 'cardiology' THEN COALESCE(pgt.actual_value, 0) > 0
-                  ELSE COALESCE(pgt.actual_value, 0) = 1
-                END
-              )
-          )::int AS tp,
-          COUNT(*) FILTER (
-            WHERE
-              (
-                CASE
-                  WHEN LOWER(pe.specialty) = 'cardiology' THEN COALESCE(pe.predicted_value, 0) > 0
-                  ELSE COALESCE(pe.predicted_value, 0) = 1
-                END
-              )
-              AND NOT (
-                CASE
-                  WHEN LOWER(pe.specialty) = 'cardiology' THEN COALESCE(pgt.actual_value, 0) > 0
-                  ELSE COALESCE(pgt.actual_value, 0) = 1
-                END
-              )
-          )::int AS fp,
-          COUNT(*) FILTER (
-            WHERE NOT (
-                CASE
-                  WHEN LOWER(pe.specialty) = 'cardiology' THEN COALESCE(pe.predicted_value, 0) > 0
-                  ELSE COALESCE(pe.predicted_value, 0) = 1
-                END
-              )
-              AND
-              (
-                CASE
-                  WHEN LOWER(pe.specialty) = 'cardiology' THEN COALESCE(pgt.actual_value, 0) > 0
-                  ELSE COALESCE(pgt.actual_value, 0) = 1
-                END
-              )
-          )::int AS fn,
-          COUNT(*) FILTER (
-            WHERE NOT (
-                CASE
-                  WHEN LOWER(pe.specialty) = 'cardiology' THEN COALESCE(pe.predicted_value, 0) > 0
-                  ELSE COALESCE(pe.predicted_value, 0) = 1
-                END
-              )
-              AND NOT (
-                CASE
-                  WHEN LOWER(pe.specialty) = 'cardiology' THEN COALESCE(pgt.actual_value, 0) > 0
-                  ELSE COALESCE(pgt.actual_value, 0) = 1
-                END
-              )
-          )::int AS tn,
-          MAX(pgt.created_at) AS last_labeled_at
-        FROM prediction_events pe
-        INNER JOIN prediction_ground_truth pgt ON pgt.prediction_event_id = pe.id
-        ${whereClause}
-      `,
-      params,
-    );
-
-    const labeledMetrics = labeledMetricsResult.rows[0];
-    const sampleSize = labeledMetrics?.sample_size || 0;
-    const tp = labeledMetrics?.tp || 0;
-    const fp = labeledMetrics?.fp || 0;
-    const fn = labeledMetrics?.fn || 0;
-    const tn = labeledMetrics?.tn || 0;
-
-    if (!sampleSize) {
-      return {
-        ...buildDefaultMetricsPayload(
-          specialty,
-          activeModelVersion,
-          "Predictions are being recorded, but no verified ground-truth outcomes have been submitted yet. Accuracy, precision, recall, and false alarm rate require actual confirmed outcomes.",
-        ),
-        totalPredictions,
-        windowStart,
-        windowEnd,
-        lastUpdated: windowEnd,
-      };
-    }
-
-    return {
-      specialty: specialty || activeModelVersion?.specialty || null,
-      modelName: activeModelVersion?.model_name || null,
-      versionTag: activeModelVersion?.version_tag || null,
-      accuracy: toRate(tp + tn, sampleSize),
-      precision: toRate(tp, tp + fp),
-      recall: toRate(tp, tp + fn),
-      falseAlarmRate: toRate(fp, fp + tn),
-      totalPredictions,
-      sampleSize,
-      windowStart,
-      windowEnd,
-      lastUpdated: labeledMetrics?.last_labeled_at || windowEnd,
-    };
+    return buildMetricsResponse(specialty, activeModelVersion, baseline, live);
   } catch (error) {
     if (isUndefinedTableError(error)) {
-      return buildDefaultMetricsPayload(
+      return buildMetricsResponse(
         specialty,
         null,
-        "Admin schema is not installed yet. Run backend/sql/admin_portal_schema.sql against your PostgreSQL database.",
-        false,
+        buildDefaultBaselineMetrics(
+          "Admin schema is not installed yet. Run backend/sql/admin_portal_schema.sql against your PostgreSQL database.",
+          false,
+        ),
+        buildDefaultLiveMetrics(
+          "Admin schema is not installed yet. Run backend/sql/admin_portal_schema.sql against your PostgreSQL database.",
+          false,
+        ),
       );
     }
 

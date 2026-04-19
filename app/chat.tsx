@@ -4,8 +4,22 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-  Alert, Animated, Dimensions, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Platform,
-  StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View,
+  Alert,
+  Animated,
+  Dimensions,
+  Easing,
+  FlatList,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import Markdown from "react-native-markdown-display";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -169,6 +183,46 @@ export default function ChatScreen() {
     }
   };
 
+  // const scanDocument = async () => {
+  //   try {
+  //     if (Platform.OS === "web") {
+  //       Alert.alert(
+  //         "Not Supported",
+  //         "Document scanning is only available on Android and iOS builds.",
+  //       );
+  //       return;
+  //     }
+
+  //     const scannerModule = require("react-native-document-scanner-plugin");
+  //     const DocumentScanner = scannerModule.default;
+  //     const ResponseType = scannerModule.ResponseType;
+  //     const ScanDocumentResponseStatus =
+  //       scannerModule.ScanDocumentResponseStatus;
+
+  //     const { scannedImages, status } = await DocumentScanner.scanDocument({
+  //       maxNumDocuments: 1,
+  //       responseType: ResponseType.ImageFilePath,
+  //     });
+
+  //     if (scannedImages?.length) {
+  //       setSelectedImage(scannedImages[0]);
+  //       return;
+  //     }
+
+  //     if (status === ScanDocumentResponseStatus.Cancel) {
+  //       return;
+  //     }
+
+  //     Alert.alert("No Scan Captured", "Please scan a document and try again.");
+  //   } catch (error) {
+  //     console.log("Error scanning document:", error);
+  //     Alert.alert(
+  //       "Scanner Unavailable",
+  //       "Document scanner could not start. Make sure you are using a native development build, not Expo Go.",
+  //     );
+  //   }
+  // };
+
   const renderMessage = ({ item }: { item: Message }) => (
     <View
       style={[styles.message, item.fromUser ? styles.userMsg : styles.botMsg]}
@@ -218,13 +272,11 @@ export default function ChatScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <TopBar />
 
-    
-        <KeyboardAvoidingView
-  style={{ flex: 1 }}
-  behavior={Platform.OS === "ios" ? "padding" : "height"}
-  keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
->
-      
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      >
         <View style={styles.container}>
           <FlatList
             inverted
@@ -336,10 +388,7 @@ export default function ChatScreen() {
               style={styles.attachOption}
               onPress={() => {
                 setShowAttachMenu(false);
-                Alert.alert(
-                  "Coming Soon",
-                  "Document scanner is under maintenance.",
-                );
+                //setTimeout(() => scanDocument(), 300);
               }}
             >
               <View style={[styles.optionIcon, { backgroundColor: "#F3E5F5" }]}>
