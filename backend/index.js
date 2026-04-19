@@ -7,6 +7,8 @@ const multer = require("multer");
 const pool = require("./db/pool");
 const chatController = require("./controllers/chatController");
 const adminRoutes = require("./routes/adminRoutes");
+const predictionRoutes = require("./routes/predictionRoutes");
+const { optionalAuth } = require("./middleware/auth");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -68,8 +70,9 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-app.post("/api/chat", upload.single("image"), chatController);
+app.post("/api/chat", upload.single("image"), optionalAuth, chatController);
 app.use("/api/admin", adminRoutes);
+app.use("/api/predictions", predictionRoutes);
 
 if (require.main === module) {
   app.listen(PORT, () => {

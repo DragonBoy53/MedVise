@@ -221,13 +221,20 @@ async function ensureModelVersion(specialty) {
   return upsertResult.rows[0];
 }
 
-async function createPredictionEvent({ specialty, extractedFeatures, toolResult, latencyMs }) {
+async function createPredictionEvent({
+  specialty,
+  extractedFeatures,
+  toolResult,
+  latencyMs,
+  clerkUserId = null,
+}) {
   const modelVersion = await ensureModelVersion(specialty);
 
   const result = await pool.query(
     `
       INSERT INTO prediction_events (
         model_version_id,
+        clerk_user_id,
         specialty,
         predicted_label,
         predicted_value,
@@ -236,11 +243,12 @@ async function createPredictionEvent({ specialty, extractedFeatures, toolResult,
         response_payload_json,
         latency_ms
       )
-      VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8)
+      VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9)
       RETURNING id, specialty, predicted_label, predicted_value, created_at
     `,
     [
       modelVersion?.id || null,
+      clerkUserId,
       specialty,
       toolResult?.label || "Unknown",
       Number.isInteger(toolResult?.prediction) ? toolResult.prediction : null,

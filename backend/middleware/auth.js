@@ -64,6 +64,10 @@ async function tryClerkToken(token) {
         clerkUser?.primaryEmailAddress?.emailAddress ||
         verifiedToken.email ||
         null,
+      fullName:
+        clerkUser?.fullName ||
+        [clerkUser?.firstName, clerkUser?.lastName].filter(Boolean).join(" ") ||
+        null,
       role,
       mfaVerified: !isMfaEnforced(),
       authProvider: "clerk",
@@ -75,32 +79,40 @@ async function tryClerkToken(token) {
   }
 }
 
-async function requireAuth(req, res, next) {
+async function authenticateRequest(req) {
   const token = extractBearerToken(req);
 
   if (!token) {
+    return null;
+  }
+
+  const localPayload = await tryLocalJwt(token);
+  if (localPayload) {
+    return {
+      ...localPayload,
+      localUserId: localPayload.id || null,
+      clerkUserId: localPayload.clerkUserId || null,
+      email: localPayload.email || null,
+      fullName: localPayload.fullName || localPayload.fullname || null,
+      mfaVerified: localPayload.mfaVerified || !isMfaEnforced(),
+      authProvider: "local_jwt",
+      tokenType: "local_jwt",
+    };
+  }
+
+  return tryClerkToken(token);
+}
+
+async function requireAuth(req, res, next) {
+  if (!extractBearerToken(req)) {
     return res.status(401).json({
       message: "Authentication required. Send a Bearer token.",
     });
   }
 
-  const localPayload = await tryLocalJwt(token);
-  if (localPayload) {
-    req.auth = {
-      ...localPayload,
-      localUserId: localPayload.id || null,
-      clerkUserId: localPayload.clerkUserId || null,
-      email: localPayload.email || null,
-      mfaVerified: localPayload.mfaVerified || !isMfaEnforced(),
-      authProvider: "local_jwt",
-      tokenType: "local_jwt",
-    };
-    return next();
-  }
-
-  const clerkPayload = await tryClerkToken(token);
-  if (clerkPayload) {
-    req.auth = clerkPayload;
+  const authPayload = await authenticateRequest(req);
+  if (authPayload) {
+    req.auth = authPayload;
     return next();
   }
 
@@ -108,6 +120,18 @@ async function requireAuth(req, res, next) {
     message:
       "Invalid or expired token. For Clerk-based sessions, make sure CLERK_SECRET_KEY is configured on the backend.",
   });
+}
+
+async function optionalAuth(req, res, next) {
+  try {
+    const authPayload = await authenticateRequest(req);
+    if (authPayload) {
+      req.auth = authPayload;
+    }
+    return next();
+  } catch (error) {
+    return next();
+  }
 }
 
 function requireRole(...allowedRoles) {
@@ -142,6 +166,7 @@ function requireAdminMfa(req, res, next) {
 
 module.exports = {
   requireAuth,
+  optionalAuth,
   requireRole,
   requireAdminMfa,
 };

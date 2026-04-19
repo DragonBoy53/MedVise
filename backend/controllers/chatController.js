@@ -102,6 +102,7 @@ async function chatController(req, res) {
             extractedFeatures: args?.extracted_features || args,
             toolResult,
             latencyMs,
+            clerkUserId: req.auth?.clerkUserId || null,
           });
         } catch (telemetryError) {
           console.error("[chatController] Telemetry logging failed:", telemetryError);

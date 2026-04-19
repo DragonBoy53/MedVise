@@ -96,6 +96,17 @@ export default function SettingsScreen() {
             </View>
           </View>
           <View style={styles.divider} />
+          <TouchableOpacity style={styles.row} onPress={() => router.push("/predictions")} activeOpacity={0.7}>
+            <View style={styles.rowLeft}>
+              <View style={[styles.iconWrap, { backgroundColor: "#f0f0f0" }]}><Ionicons name="analytics-outline" size={18} color="#444" /></View>
+              <View>
+                <Text style={styles.rowTitle}>Predictions</Text>
+                <Text style={styles.rowSubtitle}>View & label your AI predictions</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#ccc" />
+          </TouchableOpacity>
+          <View style={styles.divider} />
           <TouchableOpacity style={[styles.row, styles.rowLast]} onPress={() => setModalType("dataControls")} activeOpacity={0.7}>
             <View style={styles.rowLeft}>
               <View style={[styles.iconWrap, { backgroundColor: "#f0f0f0" }]}><Ionicons name="shield-outline" size={18} color="#444" /></View>

@@ -179,12 +179,15 @@ CREATE TABLE IF NOT EXISTS prediction_ground_truth (
 );
 
 ALTER TABLE prediction_events
+  ADD COLUMN IF NOT EXISTS clerk_user_id TEXT,
   ADD COLUMN IF NOT EXISTS predicted_value INTEGER,
   ADD COLUMN IF NOT EXISTS input_payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
   ADD COLUMN IF NOT EXISTS response_payload_json JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 ALTER TABLE prediction_ground_truth
-  ADD COLUMN IF NOT EXISTS actual_value INTEGER;
+  ADD COLUMN IF NOT EXISTS actual_value INTEGER,
+  ADD COLUMN IF NOT EXISTS entered_by_clerk_user_id TEXT,
+  ADD COLUMN IF NOT EXISTS is_prediction_correct BOOLEAN;
 
 DO $$
 BEGIN
@@ -250,6 +253,9 @@ CREATE INDEX IF NOT EXISTS idx_chat_reviews_session_created_at
 
 CREATE INDEX IF NOT EXISTS idx_prediction_events_created_at
   ON prediction_events(created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_prediction_events_clerk_user_id_created_at
+  ON prediction_events(clerk_user_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_model_baseline_metrics_model_version_id
   ON model_baseline_metrics(model_version_id);
