@@ -35,6 +35,7 @@ type Message = {
 const WINDOW = Dimensions.get("window");
 
 export default function ChatScreen() {
+  const { getToken } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -113,6 +114,7 @@ export default function ChatScreen() {
     Keyboard.dismiss();
 
     try {
+      const token = await getToken();
       const formData = new FormData();
 
       if (currentInput.trim()) {
@@ -128,7 +130,10 @@ export default function ChatScreen() {
       }
 
       const response = await apiClient.post("/api/chat", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+        headers: {
+          "Content-Type": "multipart/form-data",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
 
       const botMsg: Message = {
