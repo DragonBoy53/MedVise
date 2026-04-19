@@ -258,7 +258,7 @@ export default function PredictionDetailScreen() {
 
   useEffect(() => {
     loadPrediction();
-  }, [loadPrediction]);
+  }, []);
 
   const probabilityEntries = useMemo(() => {
     const pairs = Object.entries(item?.probabilities || {}).filter(
