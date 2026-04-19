@@ -217,7 +217,7 @@ export default function PredictionsScreen() {
   useFocusEffect(
     useCallback(() => {
       loadPredictions();
-    }, [loadPredictions]),
+    }, []),
   );
 
   const unlabeledItems = useMemo(
