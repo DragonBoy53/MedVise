@@ -1,5 +1,6 @@
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Redirect } from "expo-router";
+import { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
 
 export default function Index() {
@@ -15,7 +16,7 @@ export default function Index() {
   }
 
   if (isSignedIn) {
-    const role = user?.publicMetadata?.role as string | undefined;
+    const role = user?.publicMetadata?.role as string;
     if (role === "admin") {
       return <Redirect href={"/admin" as any} />;
     }
