@@ -76,38 +76,22 @@ function toTitleCase(value: string) {
 }
 
 function formatValue(value: unknown) {
-  if (value == null) {
-    return "-";
-  }
-
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-
-  if (typeof value === "string") {
-    return value;
-  }
-
+  if (value == null) return "-";
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "string") return value;
   return JSON.stringify(value);
 }
 
 function isPredictionUnhealthy(item: PredictionItem | null) {
-  if (!item) {
-    return false;
-  }
+  if (!item) return false;
 
   if (typeof item.predictedValue === "number") {
-    if (item.specialty.toLowerCase() === "cardiology") {
-      return item.predictedValue > 0;
-    }
-
+    if (item.specialty.toLowerCase() === "cardiology") return item.predictedValue > 0;
     return item.predictedValue === 1;
   }
 
   const label = (item.predictedLabel || "").toLowerCase();
-  if (!label) {
-    return false;
-  }
+  if (!label) return false;
 
   if (label.includes("healthy") || label.includes("negative") || label.includes("no disease")) {
     return false;
@@ -124,19 +108,9 @@ function isPredictionUnhealthy(item: PredictionItem | null) {
 
 function resolveRecommendationSpecialty(item: PredictionItem | null) {
   const specialty = (item?.specialty || "").toLowerCase();
-
-  if (specialty === "cardiology") {
-    return "cardiology";
-  }
-
-  if (specialty === "diabetes") {
-    return "diabetologist";
-  }
-
-  if (specialty === "thyroid") {
-    return "endocrinologist";
-  }
-
+  if (specialty === "cardiology") return "cardiology";
+  if (specialty === "diabetes") return "diabetologist";
+  if (specialty === "thyroid") return "endocrinologist";
   return "general hospital";
 }
 
@@ -221,9 +195,7 @@ function ConfirmSheet({
     }).start();
   }, [translateY, visible]);
 
-  if (!visible || choice == null) {
-    return null;
-  }
+  if (!visible || choice == null) return null;
 
   const isTrue = choice;
 
@@ -376,9 +348,7 @@ export default function PredictionDetailScreen() {
   }, [currentLocation, locationLoading, requestCurrentLocation, wantsRecommendations]);
 
   const submitLabel = useCallback(async () => {
-    if (!item || sheetChoice == null) {
-      return;
-    }
+    if (!item || sheetChoice == null) return;
 
     try {
       setSubmitting(true);
@@ -638,9 +608,7 @@ export default function PredictionDetailScreen() {
         loading={submitting}
         onConfirm={submitLabel}
         onClose={() => {
-          if (!submitting) {
-            setSheetVisible(false);
-          }
+          if (!submitting) setSheetVisible(false);
         }}
       />
     </SafeAreaView>
@@ -799,9 +767,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  recommendationHeaderText: {
-    flex: 1,
-  },
+  recommendationHeaderText: { flex: 1 },
   recommendationTitle: {
     fontSize: 16,
     fontWeight: "700",
@@ -854,9 +820,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: "#64748B",
   },
-  recommendationResultWrap: {
-    marginTop: 16,
-  },
+  recommendationResultWrap: { marginTop: 16 },
   locationState: {
     alignItems: "center",
     justifyContent: "center",
