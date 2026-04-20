@@ -9,7 +9,10 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "MedVise uses your location to suggest nearby hospitals when a health prediction indicates you may need care."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +21,11 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.MedVise"
+      "package": "com.anonymous.MedVise",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "output": "static",
@@ -38,7 +45,8 @@
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-location"
     ],
     "experiments": {
       "typedRoutes": true,

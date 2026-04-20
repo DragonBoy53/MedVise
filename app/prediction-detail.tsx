@@ -1,5 +1,6 @@
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -16,6 +17,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import apiClient from "../api/client";
+import HospitalRecommendations from "../components/HospitalRecommendations";
 
 type GroundTruth = {
   id: number;
@@ -87,6 +89,55 @@ function formatValue(value: unknown) {
   }
 
   return JSON.stringify(value);
+}
+
+function isPredictionUnhealthy(item: PredictionItem | null) {
+  if (!item) {
+    return false;
+  }
+
+  if (typeof item.predictedValue === "number") {
+    if (item.specialty.toLowerCase() === "cardiology") {
+      return item.predictedValue > 0;
+    }
+
+    return item.predictedValue === 1;
+  }
+
+  const label = (item.predictedLabel || "").toLowerCase();
+  if (!label) {
+    return false;
+  }
+
+  if (label.includes("healthy") || label.includes("negative") || label.includes("no disease")) {
+    return false;
+  }
+
+  return (
+    label.includes("disease") ||
+    label.includes("positive") ||
+    label.includes("risk") ||
+    label.includes("abnormal") ||
+    label.includes("unhealthy")
+  );
+}
+
+function resolveRecommendationSpecialty(item: PredictionItem | null) {
+  const specialty = (item?.specialty || "").toLowerCase();
+
+  if (specialty === "cardiology") {
+    return "cardiology";
+  }
+
+  if (specialty === "diabetes") {
+    return "diabetologist";
+  }
+
+  if (specialty === "thyroid") {
+    return "endocrinologist";
+  }
+
+  return "general hospital";
 }
 
 function ProbabilityBar({
@@ -235,6 +286,10 @@ export default function PredictionDetailScreen() {
   const [sheetChoice, setSheetChoice] = useState<boolean | null>(null);
   const [sheetVisible, setSheetVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [wantsRecommendations, setWantsRecommendations] = useState<boolean | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
 
   const loadPrediction = useCallback(async () => {
     try {
@@ -258,7 +313,7 @@ export default function PredictionDetailScreen() {
 
   useEffect(() => {
     loadPrediction();
-  }, []);
+  }, [loadPrediction]);
 
   const probabilityEntries = useMemo(() => {
     const pairs = Object.entries(item?.probabilities || {}).filter(
@@ -273,6 +328,52 @@ export default function PredictionDetailScreen() {
 
   const readOnly = Boolean(item?.groundTruth);
   const meta = getSpecialtyMeta(item?.specialty || "");
+  const showRecommendationPrompt = isPredictionUnhealthy(item);
+  const recommendationSpecialty = resolveRecommendationSpecialty(item);
+
+  const requestCurrentLocation = useCallback(async () => {
+    try {
+      setLocationLoading(true);
+      setLocationError(null);
+
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== "granted") {
+        setCurrentLocation(null);
+        setLocationError("Location permission is required to find the nearest hospitals.");
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      setCurrentLocation({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+      });
+    } catch (error: any) {
+      console.error("Failed to get device location", error);
+      setCurrentLocation(null);
+      setLocationError(
+        error?.message || "We could not fetch your current location right now.",
+      );
+    } finally {
+      setLocationLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    setWantsRecommendations(null);
+    setLocationError(null);
+    setCurrentLocation(null);
+    setLocationLoading(false);
+  }, [item?.id]);
+
+  useEffect(() => {
+    if (wantsRecommendations && !currentLocation && !locationLoading) {
+      requestCurrentLocation();
+    }
+  }, [currentLocation, locationLoading, requestCurrentLocation, wantsRecommendations]);
 
   const submitLabel = useCallback(async () => {
     if (!item || sheetChoice == null) {
@@ -425,6 +526,83 @@ export default function PredictionDetailScreen() {
             Your feedback is saved into the labeled dataset and removed from the unlabeled queue.
           </Text>
         </View>
+
+        {showRecommendationPrompt && (
+          <View style={styles.recommendationSection}>
+            <View style={styles.recommendationHeader}>
+              <View style={styles.recommendationIconWrap}>
+                <Ionicons name="medkit-outline" size={20} color="#0F766E" />
+              </View>
+              <View style={styles.recommendationHeaderText}>
+                <Text style={styles.recommendationTitle}>Recommend nearby hospital?</Text>
+                <Text style={styles.recommendationSubtitle}>
+                  If you want, MedVise can use your live location to find the nearest {recommendationSpecialty}.
+                </Text>
+              </View>
+            </View>
+
+            {wantsRecommendations == null && (
+              <View style={styles.recommendationActions}>
+                <TouchableOpacity
+                  style={styles.recommendNoButton}
+                  activeOpacity={0.84}
+                  onPress={() => setWantsRecommendations(false)}
+                >
+                  <Text style={styles.recommendNoButtonText}>No</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.recommendYesButton}
+                  activeOpacity={0.84}
+                  onPress={() => setWantsRecommendations(true)}
+                >
+                  <Ionicons name="location-outline" size={18} color="#fff" />
+                  <Text style={styles.recommendYesButtonText}>Yes, find nearby</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {wantsRecommendations === false && (
+              <Text style={styles.recommendDismissedText}>
+                You can still use the prediction details above and consult a clinician if symptoms worsen.
+              </Text>
+            )}
+
+            {wantsRecommendations && (
+              <View style={styles.recommendationResultWrap}>
+                {locationLoading ? (
+                  <View style={styles.locationState}>
+                    <ActivityIndicator size="small" color="#0F766E" />
+                    <Text style={styles.locationStateText}>Getting your current location...</Text>
+                  </View>
+                ) : locationError ? (
+                  <View style={styles.locationState}>
+                    <Text style={styles.locationErrorText}>{locationError}</Text>
+                    <TouchableOpacity
+                      style={styles.retryLocationButton}
+                      activeOpacity={0.84}
+                      onPress={requestCurrentLocation}
+                    >
+                      <Text style={styles.retryLocationButtonText}>Retry location</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : currentLocation ? (
+                  <>
+                    <Text style={styles.locationResolvedText}>
+                      Showing nearby {recommendationSpecialty} based on your current device location.
+                    </Text>
+                    <View style={styles.hospitalListShell}>
+                      <HospitalRecommendations
+                        lat={currentLocation.lat}
+                        lng={currentLocation.lng}
+                        specialty={recommendationSpecialty}
+                      />
+                    </View>
+                  </>
+                ) : null}
+              </View>
+            )}
+          </View>
+        )}
 
         {!readOnly && (
           <View style={styles.footerButtons}>
@@ -601,6 +779,127 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   helperNoteText: { flex: 1, fontSize: 12, lineHeight: 18, color: "#94A3B8" },
+  recommendationSection: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#DDEFEA",
+    padding: 16,
+  },
+  recommendationHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  recommendationIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: "#E6FFFB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recommendationHeaderText: {
+    flex: 1,
+  },
+  recommendationTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  recommendationSubtitle: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: "#64748B",
+    marginTop: 4,
+  },
+  recommendationActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 16,
+  },
+  recommendNoButton: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F8FAFC",
+  },
+  recommendNoButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#475569",
+  },
+  recommendYesButton: {
+    flex: 1.5,
+    minHeight: 46,
+    borderRadius: 14,
+    backgroundColor: "#0F766E",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  recommendYesButtonText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  recommendDismissedText: {
+    marginTop: 16,
+    fontSize: 13,
+    lineHeight: 20,
+    color: "#64748B",
+  },
+  recommendationResultWrap: {
+    marginTop: 16,
+  },
+  locationState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 18,
+    paddingHorizontal: 12,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+  },
+  locationStateText: {
+    marginTop: 10,
+    fontSize: 14,
+    color: "#475569",
+    textAlign: "center",
+  },
+  locationErrorText: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: "#B91C1C",
+    textAlign: "center",
+  },
+  retryLocationButton: {
+    marginTop: 14,
+    backgroundColor: "#0F766E",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  retryLocationButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  locationResolvedText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: "#475569",
+    marginBottom: 12,
+  },
+  hospitalListShell: {
+    minHeight: 280,
+    marginHorizontal: -8,
+    marginBottom: -8,
+  },
   footerButtons: { flexDirection: "row", gap: 12, marginTop: 2 },
   falseButton: {
     flex: 1,
