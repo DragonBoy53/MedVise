@@ -20,7 +20,7 @@ function getClerkClient() {
 
   return createClerkClient({
     secretKey: process.env.CLERK_SECRET_KEY,
-    publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+    publishableKey: process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY,
   });
 }
 
