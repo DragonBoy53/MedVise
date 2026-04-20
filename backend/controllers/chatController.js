@@ -51,9 +51,6 @@ async function chatController(req, res) {
 
     let messagePayload;
 
-    // --- THE FIX ---
-    // The strict type checker demands raw strings for text. 
-    // Do NOT wrap text in { text: "..." }
     if (file) {
       const imageBuffer = fs.readFileSync(file.path);
       messagePayload = [
@@ -63,10 +60,10 @@ async function chatController(req, res) {
             data: imageBuffer.toString("base64"),
           },
         },
-        promptText // Raw string directly in the array
+        promptText,
       ];
     } else {
-      messagePayload = promptText; // Just a raw string!
+      messagePayload = promptText;
     }
 
     const chat = ai.chats.create({
@@ -77,19 +74,20 @@ async function chatController(req, res) {
     // 1. Send the initial user message
     let response = await chat.sendMessage({ message: messagePayload });
 
+    // Track the last prediction made during this chat turn
+    let lastPrediction = null;
+
     // 2. The Function Calling Loop
     let maxIterations = 3;
     while (maxIterations-- > 0) {
-
-      // The new SDK has a clean, built-in getter for function calls!
       const functionCalls = response.functionCalls;
-      if (!functionCalls || functionCalls.length === 0) break; // Exit loop if no tools are called
+      if (!functionCalls || functionCalls.length === 0) break;
 
       const call = functionCalls[0];
       const { name, args } = call;
       console.log(`[chatController] Tool called: ${name}`);
 
-      // Call your Python FastAPI Service
+      // Call the ML service
       const toolStartTime = Date.now();
       const toolResult = await dispatchTool(name, args);
       const latencyMs = Date.now() - toolStartTime;
@@ -97,15 +95,39 @@ async function chatController(req, res) {
 
       if (specialty && !toolResult?.error) {
         try {
-          await createPredictionEvent({
+          const savedEvent = await createPredictionEvent({
             specialty,
             extractedFeatures: args?.extracted_features || args,
             toolResult,
             latencyMs,
             clerkUserId: req.auth?.clerkUserId || null,
           });
+
+          // Build a prediction object to return to the frontend
+          // savedEvent has: id, specialty, predicted_label, predicted_value, created_at
+          lastPrediction = {
+            id: savedEvent?.id || null,
+            specialty,
+            predictedLabel: toolResult?.label || savedEvent?.predicted_label || "Unknown",
+            predictedValue: Number.isInteger(toolResult?.prediction)
+              ? toolResult.prediction
+              : savedEvent?.predicted_value ?? null,
+            probabilities: toolResult?.probabilities || toolResult?.probability || null,
+          };
         } catch (telemetryError) {
           console.error("[chatController] Telemetry logging failed:", telemetryError);
+
+          // Even if DB save failed, still surface the prediction to the frontend
+          // so the hospital recommendation prompt can fire
+          lastPrediction = {
+            id: null,
+            specialty,
+            predictedLabel: toolResult?.label || "Unknown",
+            predictedValue: Number.isInteger(toolResult?.prediction)
+              ? toolResult.prediction
+              : null,
+            probabilities: toolResult?.probabilities || toolResult?.probability || null,
+          };
         }
       }
 
@@ -113,22 +135,26 @@ async function chatController(req, res) {
       response = await chat.sendMessage({
         message: [{
           functionResponse: {
-            name: name,
-            response: toolResult
-          }
-        }]
+            name,
+            response: toolResult,
+          },
+        }],
       });
     }
 
-    // Extract final text using the built-in SDK getter
+    // Extract final reply text
     const replyText = response.text || "I'm sorry, I couldn't generate a response. Please try again.";
 
-    // Cleanup image upload
+    // Cleanup temp image
     if (file) {
       try { fs.unlinkSync(file.path); } catch (e) { console.warn("Temp cleanup failed"); }
     }
 
-    res.json({ reply: replyText });
+    // Return reply + prediction so the frontend can show the hospital prompt
+    res.json({
+      reply: replyText,
+      prediction: lastPrediction, // null if no ML tool was called this turn
+    });
 
   } catch (error) {
     console.error("[chatController] Error:", error);

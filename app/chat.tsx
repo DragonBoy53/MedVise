@@ -1,9 +1,11 @@
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { FontAwesome5, Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   Dimensions,
@@ -24,15 +26,59 @@ import {
 import Markdown from "react-native-markdown-display";
 import { SafeAreaView } from "react-native-safe-area-context";
 import apiClient from "../api/client";
+import HospitalRecommendations from "../components/HospitalRecommendations";
 
 type Message = {
   id: string;
   text?: string;
   imageUri?: string;
   fromUser: boolean;
+  prediction: any;
 };
 
 const WINDOW = Dimensions.get("window");
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function isUnhealthyPrediction(prediction: any): boolean {
+  if (!prediction) return false;
+
+  if (typeof prediction.predictedValue === "number") {
+    if (prediction.specialty?.toLowerCase() === "cardiology") {
+      return prediction.predictedValue > 0;
+    }
+    return prediction.predictedValue === 1;
+  }
+
+  const label = (prediction.predictedLabel || "").toLowerCase();
+  if (!label) return false;
+
+  if (
+    label.includes("healthy") ||
+    label.includes("negative") ||
+    label.includes("no disease")
+  ) {
+    return false;
+  }
+
+  return (
+    label.includes("disease") ||
+    label.includes("positive") ||
+    label.includes("risk") ||
+    label.includes("abnormal") ||
+    label.includes("unhealthy")
+  );
+}
+
+function resolveRecommendationSpecialty(prediction: any): string {
+  const s = (prediction?.specialty || "").toLowerCase();
+  if (s === "cardiology") return "cardiology";
+  if (s === "diabetes") return "diabetologist";
+  if (s === "thyroid") return "endocrinologist";
+  return "general hospital";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function ChatScreen() {
   const { getToken } = useAuth();
@@ -40,6 +86,13 @@ export default function ChatScreen() {
   const [input, setInput] = useState("");
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+
+  // Hospital recommendation state
+  const [unhealthyPrediction, setUnhealthyPrediction] = useState<any>(null);
+  const [wantsRecommendations, setWantsRecommendations] = useState<boolean | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   const pulseScale = useRef(new Animated.Value(1)).current;
   const pulseOpacity = useRef(new Animated.Value(0.6)).current;
@@ -95,6 +148,44 @@ export default function ChatScreen() {
     ]).start();
   };
 
+  // ── Location ──────────────────────────────────────────────────────────────
+
+  const requestCurrentLocation = useCallback(async () => {
+    try {
+      setLocationLoading(true);
+      setLocationError(null);
+
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== "granted") {
+        setLocationError(
+          "Location permission is required to find nearby hospitals.",
+        );
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      setCurrentLocation({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+      });
+    } catch (e: any) {
+      setLocationError(e?.message || "Could not get your current location.");
+    } finally {
+      setLocationLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (wantsRecommendations && !currentLocation && !locationLoading) {
+      requestCurrentLocation();
+    }
+  }, [wantsRecommendations, currentLocation, locationLoading, requestCurrentLocation]);
+
+  // ── Send message ──────────────────────────────────────────────────────────
+
   const sendMessage = async () => {
     if (!input.trim() && !selectedImage) return;
 
@@ -106,6 +197,7 @@ export default function ChatScreen() {
       text: currentInput,
       imageUri: currentImage || undefined,
       fromUser: true,
+      prediction: null,
     };
 
     setMessages((m) => [newMsg, ...m]);
@@ -140,13 +232,27 @@ export default function ChatScreen() {
         id: (Date.now() + 1).toString(),
         text: response.data.reply,
         fromUser: false,
+        prediction: response.data.prediction,
       };
       setMessages((m) => [botMsg, ...m]);
+
+      const prediction = response.data.prediction;
+      console.log(response.data);
+
+      if (prediction && isUnhealthyPrediction(prediction)) {
+        // Reset previous recommendation state, then surface the prompt
+        setUnhealthyPrediction(prediction);
+        setWantsRecommendations(null);
+        setCurrentLocation(null);
+        setLocationError(null);
+      }
     } catch (error: any) {
       console.error("Chat Error:", error);
       Alert.alert("Error", "Could not connect to MedVise AI.");
     }
   };
+
+  // ── Image helpers ─────────────────────────────────────────────────────────
 
   const pickImage = async () => {
     try {
@@ -188,45 +294,7 @@ export default function ChatScreen() {
     }
   };
 
-  // const scanDocument = async () => {
-  //   try {
-  //     if (Platform.OS === "web") {
-  //       Alert.alert(
-  //         "Not Supported",
-  //         "Document scanning is only available on Android and iOS builds.",
-  //       );
-  //       return;
-  //     }
-
-  //     const scannerModule = require("react-native-document-scanner-plugin");
-  //     const DocumentScanner = scannerModule.default;
-  //     const ResponseType = scannerModule.ResponseType;
-  //     const ScanDocumentResponseStatus =
-  //       scannerModule.ScanDocumentResponseStatus;
-
-  //     const { scannedImages, status } = await DocumentScanner.scanDocument({
-  //       maxNumDocuments: 1,
-  //       responseType: ResponseType.ImageFilePath,
-  //     });
-
-  //     if (scannedImages?.length) {
-  //       setSelectedImage(scannedImages[0]);
-  //       return;
-  //     }
-
-  //     if (status === ScanDocumentResponseStatus.Cancel) {
-  //       return;
-  //     }
-
-  //     Alert.alert("No Scan Captured", "Please scan a document and try again.");
-  //   } catch (error) {
-  //     console.log("Error scanning document:", error);
-  //     Alert.alert(
-  //       "Scanner Unavailable",
-  //       "Document scanner could not start. Make sure you are using a native development build, not Expo Go.",
-  //     );
-  //   }
-  // };
+  // ── Render helpers ────────────────────────────────────────────────────────
 
   const renderMessage = ({ item }: { item: Message }) => (
     <View
@@ -272,6 +340,10 @@ export default function ChatScreen() {
     );
   };
 
+  const recommendationSpecialty = resolveRecommendationSpecialty(unhealthyPrediction);
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
@@ -294,6 +366,95 @@ export default function ChatScreen() {
             keyboardDismissMode="on-drag"
           />
 
+          {/* ── Hospital Recommendation Banner ── */}
+          {unhealthyPrediction && (
+            <View style={styles.recommendationBanner}>
+              <View style={styles.recommendationBannerHeader}>
+                <View style={styles.recommendationIconWrap}>
+                  <Ionicons name="medkit-outline" size={20} color="#0F766E" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.recommendationTitle}>
+                    Recommend nearby hospital?
+                  </Text>
+                  <Text style={styles.recommendationSubtitle}>
+                    MedVise can find the nearest {recommendationSpecialty} using
+                    your live location.
+                  </Text>
+                </View>
+              </View>
+
+              {wantsRecommendations == null && (
+                <View style={styles.recommendationActions}>
+                  <TouchableOpacity
+                    style={styles.recommendNoBtn}
+                    onPress={() => {
+                      setWantsRecommendations(false);
+                      setUnhealthyPrediction(null);
+                    }}
+                  >
+                    <Text style={styles.recommendNoBtnText}>No thanks</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.recommendYesBtn}
+                    onPress={() => setWantsRecommendations(true)}
+                  >
+                    <Ionicons name="location-outline" size={16} color="#fff" />
+                    <Text style={styles.recommendYesBtnText}>
+                      Yes, find nearby
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {wantsRecommendations === false && (
+                <Text style={styles.recommendDismissedText}>
+                  You can still consult a clinician if your symptoms worsen.
+                </Text>
+              )}
+
+              {wantsRecommendations && locationLoading && (
+                <View style={styles.locationState}>
+                  <ActivityIndicator size="small" color="#0F766E" />
+                  <Text style={styles.locationStateText}>
+                    Getting your current location...
+                  </Text>
+                </View>
+              )}
+
+              {wantsRecommendations && locationError && !locationLoading && (
+                <View style={styles.locationState}>
+                  <Text style={styles.locationErrorText}>{locationError}</Text>
+                  <TouchableOpacity
+                    style={styles.retryLocationButton}
+                    onPress={requestCurrentLocation}
+                  >
+                    <Text style={styles.retryLocationButtonText}>
+                      Retry location
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {wantsRecommendations && currentLocation && !locationLoading && (
+                <>
+                  <Text style={styles.locationResolvedText}>
+                    Showing nearby {recommendationSpecialty} based on your
+                    current location.
+                  </Text>
+                  <View style={styles.hospitalListShell}>
+                    <HospitalRecommendations
+                      lat={currentLocation.lat}
+                      lng={currentLocation.lng}
+                      specialty={recommendationSpecialty}
+                    />
+                  </View>
+                </>
+              )}
+            </View>
+          )}
+
+          {/* ── Input bar ── */}
           <View style={styles.bottomWrapper}>
             {selectedImage && (
               <View style={styles.previewContainer}>
@@ -393,7 +554,6 @@ export default function ChatScreen() {
               style={styles.attachOption}
               onPress={() => {
                 setShowAttachMenu(false);
-                //setTimeout(() => scanDocument(), 300);
               }}
             >
               <View style={[styles.optionIcon, { backgroundColor: "#F3E5F5" }]}>
@@ -407,6 +567,8 @@ export default function ChatScreen() {
     </SafeAreaView>
   );
 }
+
+// ── TopBar ────────────────────────────────────────────────────────────────────
 
 function UserAvatar({
   url,
@@ -519,17 +681,15 @@ function TopBar() {
   const isAdmin = role === "admin";
   const createdAt = user?.createdAt
     ? new Date(user.createdAt).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    })
     : null;
-  // Get Google profile photo directly from externalAccounts if available
   const googleAccount = user?.externalAccounts?.find(
     (a) => a.provider === "google",
   );
   const googlePhoto = googleAccount?.imageUrl || null;
-  // Clerk imageUrl works for Google signups — use it directly with a cache-bust
   const clerkPhoto = user?.imageUrl || null;
   const avatarUrl =
     googlePhoto ||
@@ -543,7 +703,6 @@ function TopBar() {
 
   return (
     <>
-      {/* ── Navigation bar ── */}
       <View style={styles.topBar}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           {isAdmin && (
@@ -567,7 +726,6 @@ function TopBar() {
         </TouchableOpacity>
       </View>
 
-      {/* ── Profile popup ── */}
       <Modal
         transparent
         visible={showProfile}
@@ -717,6 +875,8 @@ function TopBar() {
     </>
   );
 }
+
+// ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#fff" },
@@ -890,6 +1050,126 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   attachText: { fontSize: 13, color: "#333", fontWeight: "500" },
+
+  // ── Recommendation banner ──
+  recommendationBanner: {
+    backgroundColor: "#F0FDF9",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#CCEDE7",
+    padding: 16,
+    marginHorizontal: 12,
+    marginBottom: 8,
+  },
+  recommendationBannerHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  recommendationIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: "#E6FFFB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recommendationTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  recommendationSubtitle: {
+    fontSize: 13,
+    color: "#64748B",
+    marginTop: 4,
+    lineHeight: 19,
+  },
+  recommendationActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 12,
+  },
+  recommendNoBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F8FAFC",
+  },
+  recommendNoBtnText: {
+    color: "#475569",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  recommendYesBtn: {
+    flex: 1.5,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "#0F766E",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  recommendYesBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  recommendDismissedText: {
+    marginTop: 12,
+    fontSize: 13,
+    lineHeight: 20,
+    color: "#64748B",
+  },
+  locationState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+    marginTop: 12,
+    gap: 8,
+  },
+  locationStateText: {
+    fontSize: 13,
+    color: "#475569",
+    textAlign: "center",
+  },
+  locationErrorText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: "#B91C1C",
+    textAlign: "center",
+  },
+  retryLocationButton: {
+    marginTop: 8,
+    backgroundColor: "#0F766E",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  retryLocationButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  locationResolvedText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: "#475569",
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  hospitalListShell: {
+    minHeight: 300,
+    marginHorizontal: -8,
+  },
 });
 
 const profileStyles = StyleSheet.create({
