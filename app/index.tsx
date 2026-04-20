@@ -15,7 +15,7 @@ export default function Index() {
   }
 
   if (isSignedIn) {
-    const role = user?.unsafeMetadata?.role as string | undefined;
+    const role = user?.publicMetadata?.role as string | undefined;
     if (role === "admin") {
       return <Redirect href={"/admin" as any} />;
     }

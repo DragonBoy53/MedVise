@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import {
+    Alert,
     Animated,
     Image,
     Modal,
@@ -14,6 +15,7 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import apiClient from "../../api/client";
 
 function UserAvatar({
   url,
@@ -61,10 +63,11 @@ function UserAvatar({
 
 export default function AdminDashboard() {
   const { user } = useUser();
-  const { signOut } = useAuth();
+  const { getToken, signOut } = useAuth();
   const router = useRouter();
 
   const [showProfile, setShowProfile] = useState(false);
+  const [verifyingAccess, setVerifyingAccess] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.88)).current;
 
@@ -74,7 +77,7 @@ export default function AdminDashboard() {
   const email = user?.primaryEmailAddress?.emailAddress || "";
   const phone = user?.primaryPhoneNumber?.phoneNumber || null;
   const username = user?.username || null;
-  const role = (user?.unsafeMetadata?.role as string) || null;
+  const role = (user?.publicMetadata?.role as string) || null;
   const createdAt = user?.createdAt
     ? new Date(user.createdAt).toLocaleDateString("en-US", {
         year: "numeric",
@@ -136,6 +139,39 @@ export default function AdminDashboard() {
       await signOut();
       router.replace("/(auth)/sign-in");
     }, 200);
+  };
+
+  const verifyAdminAccess = async () => {
+    try {
+      setVerifyingAccess(true);
+
+      const token = await getToken();
+      if (!token) {
+        Alert.alert("No token", "No Clerk session token was available for this request.");
+        return;
+      }
+
+      const response = await apiClient.get("/api/admin/test", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      Alert.alert(
+        "Admin route working",
+        `Message: ${response.data?.message || "OK"}\nRole: ${response.data?.role || "unknown"}\nUser ID: ${response.data?.userId || "unknown"}`,
+      );
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Admin test failed.";
+
+      Alert.alert("Admin route failed", `Status: ${status || "unknown"}\n${message}`);
+    } finally {
+      setVerifyingAccess(false);
+    }
   };
 
   return (
@@ -207,6 +243,29 @@ export default function AdminDashboard() {
             <Text style={styles.cardTitle}>Backup & Recovery</Text>
             <Text style={styles.cardDesc}>
               Trigger data backups and system recovery
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#aaa" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.card, { borderLeftColor: "#111" }]}
+          onPress={verifyAdminAccess}
+          disabled={verifyingAccess}
+        >
+          <View style={[styles.cardIcon, { backgroundColor: "#F3F4F6" }]}>
+            <Ionicons
+              name={verifyingAccess ? "sync-outline" : "shield-checkmark-outline"}
+              size={26}
+              color="#111"
+            />
+          </View>
+          <View style={styles.cardText}>
+            <Text style={styles.cardTitle}>Verify Admin Access</Text>
+            <Text style={styles.cardDesc}>
+              {verifyingAccess
+                ? "Checking Clerk token against /api/admin/test..."
+                : "Run a live backend check for your Clerk admin session"}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color="#aaa" />

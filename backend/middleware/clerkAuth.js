@@ -12,7 +12,7 @@ const getClerkUser = async (req, res, next) => {
 
     const client = createClerkClient({
       secretKey: process.env.CLERK_SECRET_KEY,
-      publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+      publishableKey: process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY,
     });
 
     req.clerkUser = await client.users.getUser(req.auth.clerkUserId);
