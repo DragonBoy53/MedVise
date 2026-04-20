@@ -1,4 +1,3 @@
-const jwt = require("jsonwebtoken");
 const { createClerkClient, verifyToken } = require("@clerk/backend");
 
 function extractBearerToken(req) {
@@ -25,14 +24,6 @@ function getClerkClient() {
   });
 }
 
-async function tryLocalJwt(token) {
-  try {
-    return jwt.verify(token, process.env.JWT_SECRET);
-  } catch (error) {
-    return null;
-  }
-}
-
 async function tryClerkToken(token) {
   if (!process.env.CLERK_SECRET_KEY) {
     return null;
@@ -49,22 +40,35 @@ async function tryClerkToken(token) {
       return null;
     }
 
-    const clerkClient = getClerkClient();
-    const clerkUser = clerkClient ? await clerkClient.users.getUser(clerkUserId) : null;
-
+    // Prefer custom Clerk session claims so RBAC stays stateless.
     const role =
-      clerkUser?.publicMetadata?.role ||
-      clerkUser?.unsafeMetadata?.role ||
+      verifiedToken.role ||
+      verifiedToken?.publicMetadata?.role ||
+      verifiedToken?.metadata?.role ||
       "user";
+
+    let clerkUser = null;
+    const needsUserLookup =
+      !verifiedToken.email &&
+      !verifiedToken.name &&
+      !verifiedToken.firstName &&
+      !verifiedToken.lastName;
+
+    if (needsUserLookup) {
+      const clerkClient = getClerkClient();
+      clerkUser = clerkClient ? await clerkClient.users.getUser(clerkUserId) : null;
+    }
 
     return {
       id: null,
       clerkUserId,
       email:
-        clerkUser?.primaryEmailAddress?.emailAddress ||
         verifiedToken.email ||
+        clerkUser?.primaryEmailAddress?.emailAddress ||
         null,
       fullName:
+        verifiedToken.name ||
+        [verifiedToken.firstName, verifiedToken.lastName].filter(Boolean).join(" ") ||
         clerkUser?.fullName ||
         [clerkUser?.firstName, clerkUser?.lastName].filter(Boolean).join(" ") ||
         null,
@@ -86,20 +90,6 @@ async function authenticateRequest(req) {
     return null;
   }
 
-  const localPayload = await tryLocalJwt(token);
-  if (localPayload) {
-    return {
-      ...localPayload,
-      localUserId: localPayload.id || null,
-      clerkUserId: localPayload.clerkUserId || null,
-      email: localPayload.email || null,
-      fullName: localPayload.fullName || localPayload.fullname || null,
-      mfaVerified: localPayload.mfaVerified || !isMfaEnforced(),
-      authProvider: "local_jwt",
-      tokenType: "local_jwt",
-    };
-  }
-
   return tryClerkToken(token);
 }
 
@@ -118,7 +108,7 @@ async function requireAuth(req, res, next) {
 
   return res.status(401).json({
     message:
-      "Invalid or expired token. For Clerk-based sessions, make sure CLERK_SECRET_KEY is configured on the backend.",
+      "Invalid or expired Clerk session token. Make sure CLERK_SECRET_KEY is configured on the backend.",
   });
 }
 

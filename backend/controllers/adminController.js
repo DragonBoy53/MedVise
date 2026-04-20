@@ -81,7 +81,10 @@ async function listBackups(req, res) {
 
 async function createBackup(req, res) {
   try {
-    const job = await adminService.createBackupJob(req.auth.localUserId || null);
+    const job = await adminService.createBackupJob({
+      initiatedBy: req.auth.localUserId || null,
+      initiatedByClerkUserId: req.auth.clerkUserId || null,
+    });
     res.status(202).json({
       message: "Backup job queued. Attach a worker to run pg_dump and upload the artifact.",
       job,
@@ -102,11 +105,12 @@ async function createRecovery(req, res) {
   try {
     const { backupJobId, targetEnv = "staging" } = req.body;
 
-    const job = await adminService.createRecoveryJob(
-      req.auth.localUserId || null,
+    const job = await adminService.createRecoveryJob({
+      initiatedBy: req.auth.localUserId || null,
+      initiatedByClerkUserId: req.auth.clerkUserId || null,
       backupJobId,
       targetEnv,
-    );
+    });
 
     return res.status(202).json({
       message:
@@ -153,11 +157,12 @@ async function queueRetrainingFeedback(req, res) {
   try {
     const { id: chatSessionId } = req.params;
     const { notes } = req.body;
-    const record = await adminService.queueRetrainingFeedback(
+    const record = await adminService.queueRetrainingFeedback({
       chatSessionId,
-      req.auth.localUserId || null,
+      reviewedBy: req.auth.localUserId || null,
+      reviewedByClerkUserId: req.auth.clerkUserId || null,
       notes,
-    );
+    });
 
     res.status(201).json({
       message: "Interaction queued for retraining review.",
@@ -193,6 +198,7 @@ async function upsertPredictionGroundTruth(req, res) {
       actualLabel,
       labelSource,
       enteredBy: req.auth.localUserId || null,
+      enteredByClerkUserId: req.auth.clerkUserId || null,
     });
 
     return res.status(201).json({

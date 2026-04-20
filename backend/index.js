@@ -1,14 +1,11 @@
 require("dotenv").config();
 const express = require("express");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
 const cors = require("cors");
 const multer = require("multer");
-const pool = require("./db/pool");
 const chatController = require("./controllers/chatController");
 const adminRoutes = require("./routes/adminRoutes");
 const predictionRoutes = require("./routes/predictionRoutes");
-const { optionalAuth } = require("./middleware/auth");
+const { optionalAuth, requireAuth, requireRole } = require("./middleware/auth");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -19,50 +16,26 @@ app.use(express.json());
 const upload = multer({ dest: "/tmp" });
 
 app.post("/api/register", async (req, res) => {
-  try {
-    const { fullName, email, password, role } = req.body;
-    if (!fullName || !email || !password || !role) return res.status(400).json({ message: "All fields required" });
-
-    const userExists = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
-    if (userExists.rows.length > 0) return res.status(400).json({ message: "Email already in use" });
-
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
-
-    const newUser = await pool.query(
-      "INSERT INTO users (fullName, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, email, role",
-      [fullName, email, passwordHash, role]
-    );
-
-    res.status(201).json({ message: "User registered!", user: newUser.rows[0] });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
+  res.status(410).json({
+    message:
+      "Local password registration has been retired. Create users through Clerk sign-up and assign roles through Clerk metadata.",
+  });
 });
 
 app.post("/api/login", async (req, res) => {
+  res.status(410).json({
+    message:
+      "Local login has been retired. Sign in through Clerk on the client, then send the Clerk session token as a Bearer token.",
+  });
+});
+
+app.get("/api/admin/test", requireAuth, requireRole("admin"), async (req, res) => {
   try {
-    const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ message: "Missing credentials" });
-
-    const user = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
-    if (user.rows.length === 0) return res.status(400).json({ message: "Invalid credentials" });
-
-    const dbUser = user.rows[0];
-    const isMatch = await bcrypt.compare(password, dbUser.password_hash);
-    if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
-
-    const token = jwt.sign(
-      { id: dbUser.id, email: dbUser.email, role: dbUser.role },
-      process.env.JWT_SECRET,
-      { expiresIn: "1d" }
-    );
-
     res.status(200).json({
-      message: "Login successful!",
-      token: token,
-      user: { id: dbUser.id, email: dbUser.email, fullName: dbUser.fullname, role: dbUser.role },
+      message: "Admin access granted via Clerk!",
+      userId: req.auth.clerkUserId,
+      role: req.auth.role,
+      sessionId: req.auth.sessionId
     });
   } catch (err) {
     console.error(err);

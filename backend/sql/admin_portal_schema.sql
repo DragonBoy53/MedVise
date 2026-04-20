@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS admin_sessions (
 CREATE TABLE IF NOT EXISTS audit_logs (
   id BIGSERIAL PRIMARY KEY,
   actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  actor_clerk_user_id TEXT,
   action TEXT NOT NULL,
   entity_type TEXT NOT NULL,
   entity_id TEXT,
@@ -69,6 +70,7 @@ CREATE TABLE IF NOT EXISTS model_versions (
   is_active BOOLEAN NOT NULL DEFAULT FALSE,
   deployed_at TIMESTAMPTZ,
   created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_by_clerk_user_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (specialty, version_tag)
 );
@@ -76,6 +78,7 @@ CREATE TABLE IF NOT EXISTS model_versions (
 CREATE TABLE IF NOT EXISTS backup_jobs (
   id BIGSERIAL PRIMARY KEY,
   initiated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  initiated_by_clerk_user_id TEXT,
   status TEXT NOT NULL DEFAULT 'queued',
   storage_uri TEXT,
   checksum TEXT,
@@ -90,6 +93,7 @@ CREATE TABLE IF NOT EXISTS recovery_jobs (
   id BIGSERIAL PRIMARY KEY,
   backup_job_id BIGINT NOT NULL REFERENCES backup_jobs(id) ON DELETE RESTRICT,
   initiated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  initiated_by_clerk_user_id TEXT,
   status TEXT NOT NULL DEFAULT 'queued',
   target_env TEXT NOT NULL DEFAULT 'staging',
   validation_report_json JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -136,6 +140,7 @@ CREATE TABLE IF NOT EXISTS chat_reviews (
   id BIGSERIAL PRIMARY KEY,
   chat_session_id UUID NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
   reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  reviewed_by_clerk_user_id TEXT,
   quality_score SMALLINT,
   compliance_status TEXT,
   issue_type TEXT,
@@ -148,6 +153,7 @@ CREATE TABLE IF NOT EXISTS retraining_feedback_queue (
   id BIGSERIAL PRIMARY KEY,
   chat_session_id UUID NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
   submitted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  submitted_by_clerk_user_id TEXT,
   notes TEXT,
   status TEXT NOT NULL DEFAULT 'queued',
   exported_at TIMESTAMPTZ,
@@ -188,6 +194,24 @@ ALTER TABLE prediction_ground_truth
   ADD COLUMN IF NOT EXISTS actual_value INTEGER,
   ADD COLUMN IF NOT EXISTS entered_by_clerk_user_id TEXT,
   ADD COLUMN IF NOT EXISTS is_prediction_correct BOOLEAN;
+
+ALTER TABLE audit_logs
+  ADD COLUMN IF NOT EXISTS actor_clerk_user_id TEXT;
+
+ALTER TABLE model_versions
+  ADD COLUMN IF NOT EXISTS created_by_clerk_user_id TEXT;
+
+ALTER TABLE backup_jobs
+  ADD COLUMN IF NOT EXISTS initiated_by_clerk_user_id TEXT;
+
+ALTER TABLE recovery_jobs
+  ADD COLUMN IF NOT EXISTS initiated_by_clerk_user_id TEXT;
+
+ALTER TABLE chat_reviews
+  ADD COLUMN IF NOT EXISTS reviewed_by_clerk_user_id TEXT;
+
+ALTER TABLE retraining_feedback_queue
+  ADD COLUMN IF NOT EXISTS submitted_by_clerk_user_id TEXT;
 
 DO $$
 BEGIN
@@ -236,11 +260,20 @@ CREATE TABLE IF NOT EXISTS metric_snapshots (
 CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_created_at
   ON audit_logs(actor_user_id, created_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_clerk_created_at
+  ON audit_logs(actor_clerk_user_id, created_at DESC);
+
 CREATE INDEX IF NOT EXISTS idx_backup_jobs_created_at
   ON backup_jobs(created_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_backup_jobs_initiated_by_clerk_created_at
+  ON backup_jobs(initiated_by_clerk_user_id, created_at DESC);
+
 CREATE INDEX IF NOT EXISTS idx_recovery_jobs_created_at
   ON recovery_jobs(created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_recovery_jobs_initiated_by_clerk_created_at
+  ON recovery_jobs(initiated_by_clerk_user_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_chat_sessions_started_at
   ON chat_sessions(started_at DESC);
@@ -250,6 +283,12 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_session_created_at
 
 CREATE INDEX IF NOT EXISTS idx_chat_reviews_session_created_at
   ON chat_reviews(chat_session_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_chat_reviews_reviewer_clerk_created_at
+  ON chat_reviews(reviewed_by_clerk_user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_retraining_feedback_queue_submitted_by_clerk_created_at
+  ON retraining_feedback_queue(submitted_by_clerk_user_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_prediction_events_created_at
   ON prediction_events(created_at DESC);

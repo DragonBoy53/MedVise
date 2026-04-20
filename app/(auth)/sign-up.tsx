@@ -21,7 +21,7 @@ export default function SignupScreen() {
   const [fullName, setFullName] = useState("");
   const [emailAddress, setEmailAddress] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"user" | "admin">("user");
+  //const [role, setRole] = useState<"user" | "admin">("user");
 
   const [pendingVerification, setPendingVerification] = useState(false);
   const [code, setCode] = useState("");
@@ -123,7 +123,7 @@ export default function SignupScreen() {
         password,
         firstName,
         lastName,
-        unsafeMetadata: { role },
+        unsafeMetadata: { role: "user"},
       });
 
       await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
@@ -236,43 +236,7 @@ export default function SignupScreen() {
                   value={password}
                   onChangeText={setPassword}
                 />
-
-                <Text style={styles.roleLabel}>Sign up as:</Text>
-                <View style={styles.roleRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.roleOption,
-                      role === "user" && styles.roleSelected,
-                    ]}
-                    onPress={() => setRole("user")}
-                  >
-                    <Text
-                      style={[
-                        styles.roleText,
-                        role === "user" && styles.roleTextSelected,
-                      ]}
-                    >
-                      User
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.roleOption,
-                      role === "admin" && styles.roleSelected,
-                    ]}
-                    onPress={() => setRole("admin")}
-                  >
-                    <Text
-                      style={[
-                        styles.roleText,
-                        role === "admin" && styles.roleTextSelected,
-                      ]}
-                    >
-                      Admin
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
+                
                 <TouchableOpacity
                   style={styles.signupBtn}
                   onPress={onSignUpPress}

@@ -372,6 +372,8 @@ async function listBackupJobs() {
     const result = await pool.query(`
       SELECT
         id,
+        initiated_by AS "initiatedBy",
+        initiated_by_clerk_user_id AS "initiatedByClerkUserId",
         status,
         storage_uri AS "storageUri",
         checksum,
@@ -394,19 +396,20 @@ async function listBackupJobs() {
   }
 }
 
-async function createBackupJob(initiatedBy) {
+async function createBackupJob({ initiatedBy = null, initiatedByClerkUserId = null }) {
   try {
     const result = await pool.query(
       `
-        INSERT INTO backup_jobs (initiated_by, status)
-        VALUES ($1, 'queued')
+        INSERT INTO backup_jobs (initiated_by, initiated_by_clerk_user_id, status)
+        VALUES ($1, $2, 'queued')
         RETURNING
           id,
           initiated_by AS "initiatedBy",
+          initiated_by_clerk_user_id AS "initiatedByClerkUserId",
           status,
           created_at AS "createdAt"
       `,
-      [initiatedBy],
+      [initiatedBy, initiatedByClerkUserId],
     );
 
     return result.rows[0];
@@ -418,7 +421,12 @@ async function createBackupJob(initiatedBy) {
   }
 }
 
-async function createRecoveryJob(initiatedBy, backupJobId, targetEnv) {
+async function createRecoveryJob({
+  initiatedBy = null,
+  initiatedByClerkUserId = null,
+  backupJobId,
+  targetEnv,
+}) {
   try {
     let effectiveBackupJobId = backupJobId;
 
@@ -441,17 +449,25 @@ async function createRecoveryJob(initiatedBy, backupJobId, targetEnv) {
 
     const result = await pool.query(
       `
-        INSERT INTO recovery_jobs (backup_job_id, initiated_by, status, target_env, confirmed_at)
-        VALUES ($1, $2, 'queued', $3, NOW())
+        INSERT INTO recovery_jobs (
+          backup_job_id,
+          initiated_by,
+          initiated_by_clerk_user_id,
+          status,
+          target_env,
+          confirmed_at
+        )
+        VALUES ($1, $2, $3, 'queued', $4, NOW())
         RETURNING
           id,
           backup_job_id AS "backupJobId",
           initiated_by AS "initiatedBy",
+          initiated_by_clerk_user_id AS "initiatedByClerkUserId",
           status,
           target_env AS "targetEnv",
           created_at AS "createdAt"
       `,
-      [effectiveBackupJobId, initiatedBy, targetEnv],
+      [effectiveBackupJobId, initiatedBy, initiatedByClerkUserId, targetEnv],
     );
 
     return result.rows[0];
@@ -504,21 +520,33 @@ async function listChatLogs({ limit = 20, flaggedOnly = false }) {
   return result.rows;
 }
 
-async function queueRetrainingFeedback(chatSessionId, reviewedBy, notes) {
+async function queueRetrainingFeedback({
+  chatSessionId,
+  reviewedBy = null,
+  reviewedByClerkUserId = null,
+  notes,
+}) {
   try {
     const result = await pool.query(
       `
-        INSERT INTO retraining_feedback_queue (chat_session_id, submitted_by, notes, status)
-        VALUES ($1, $2, $3, 'queued')
+        INSERT INTO retraining_feedback_queue (
+          chat_session_id,
+          submitted_by,
+          submitted_by_clerk_user_id,
+          notes,
+          status
+        )
+        VALUES ($1, $2, $3, $4, 'queued')
         RETURNING
           id,
           chat_session_id AS "chatSessionId",
           submitted_by AS "submittedBy",
+          submitted_by_clerk_user_id AS "submittedByClerkUserId",
           notes,
           status,
           created_at AS "createdAt"
       `,
-      [chatSessionId, reviewedBy, notes || null],
+      [chatSessionId, reviewedBy, reviewedByClerkUserId, notes || null],
     );
 
     return result.rows[0];
@@ -536,6 +564,7 @@ async function upsertPredictionGroundTruth({
   actualLabel,
   labelSource,
   enteredBy,
+  enteredByClerkUserId,
 }) {
   try {
     const predictionResult = await pool.query(
@@ -572,15 +601,17 @@ async function upsertPredictionGroundTruth({
           actual_label,
           actual_value,
           label_source,
-          entered_by
+          entered_by,
+          entered_by_clerk_user_id
         )
-        VALUES ($1, $2, $3, $4, $5)
+        VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT (prediction_event_id)
         DO UPDATE SET
           actual_label = EXCLUDED.actual_label,
           actual_value = EXCLUDED.actual_value,
           label_source = EXCLUDED.label_source,
           entered_by = EXCLUDED.entered_by,
+          entered_by_clerk_user_id = EXCLUDED.entered_by_clerk_user_id,
           created_at = NOW()
         RETURNING
           id,
@@ -588,6 +619,7 @@ async function upsertPredictionGroundTruth({
           actual_label AS "actualLabel",
           actual_value AS "actualValue",
           label_source AS "labelSource",
+          entered_by_clerk_user_id AS "enteredByClerkUserId",
           created_at AS "createdAt"
       `,
       [
@@ -596,6 +628,7 @@ async function upsertPredictionGroundTruth({
         actualValue,
         labelSource || "admin_review",
         enteredBy || null,
+        enteredByClerkUserId || null,
       ],
     );
 
