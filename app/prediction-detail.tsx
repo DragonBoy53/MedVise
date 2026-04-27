@@ -1,6 +1,5 @@
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
-import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -17,7 +16,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import apiClient from "../api/client";
-import HospitalRecommendations from "../components/HospitalRecommendations";
+import HospitalRecommendationPopup from "../components/HospitalRecommendationPopup";
 
 type GroundTruth = {
   id: number;
@@ -259,9 +258,7 @@ export default function PredictionDetailScreen() {
   const [sheetVisible, setSheetVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [wantsRecommendations, setWantsRecommendations] = useState<boolean | null>(null);
-  const [locationLoading, setLocationLoading] = useState(false);
-  const [locationError, setLocationError] = useState<string | null>(null);
-  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [showRecommendationPopup, setShowRecommendationPopup] = useState(false);
 
   const loadPrediction = useCallback(async () => {
     try {
@@ -303,49 +300,10 @@ export default function PredictionDetailScreen() {
   const showRecommendationPrompt = isPredictionUnhealthy(item);
   const recommendationSpecialty = resolveRecommendationSpecialty(item);
 
-  const requestCurrentLocation = useCallback(async () => {
-    try {
-      setLocationLoading(true);
-      setLocationError(null);
-
-      const permission = await Location.requestForegroundPermissionsAsync();
-      if (permission.status !== "granted") {
-        setCurrentLocation(null);
-        setLocationError("Location permission is required to find the nearest hospitals.");
-        return;
-      }
-
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      setCurrentLocation({
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-      });
-    } catch (error: any) {
-      console.error("Failed to get device location", error);
-      setCurrentLocation(null);
-      setLocationError(
-        error?.message || "We could not fetch your current location right now.",
-      );
-    } finally {
-      setLocationLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
     setWantsRecommendations(null);
-    setLocationError(null);
-    setCurrentLocation(null);
-    setLocationLoading(false);
+    setShowRecommendationPopup(false);
   }, [item?.id]);
-
-  useEffect(() => {
-    if (wantsRecommendations && !currentLocation && !locationLoading) {
-      requestCurrentLocation();
-    }
-  }, [currentLocation, locationLoading, requestCurrentLocation, wantsRecommendations]);
 
   const submitLabel = useCallback(async () => {
     if (!item || sheetChoice == null) return;
@@ -523,7 +481,10 @@ export default function PredictionDetailScreen() {
                 <TouchableOpacity
                   style={styles.recommendYesButton}
                   activeOpacity={0.84}
-                  onPress={() => setWantsRecommendations(true)}
+                  onPress={() => {
+                    setWantsRecommendations(true);
+                    setShowRecommendationPopup(true);
+                  }}
                 >
                   <Ionicons name="location-outline" size={18} color="#fff" />
                   <Text style={styles.recommendYesButtonText}>Yes, find nearby</Text>
@@ -539,36 +500,19 @@ export default function PredictionDetailScreen() {
 
             {wantsRecommendations && (
               <View style={styles.recommendationResultWrap}>
-                {locationLoading ? (
-                  <View style={styles.locationState}>
-                    <ActivityIndicator size="small" color="#0F766E" />
-                    <Text style={styles.locationStateText}>Getting your current location...</Text>
-                  </View>
-                ) : locationError ? (
-                  <View style={styles.locationState}>
-                    <Text style={styles.locationErrorText}>{locationError}</Text>
-                    <TouchableOpacity
-                      style={styles.retryLocationButton}
-                      activeOpacity={0.84}
-                      onPress={requestCurrentLocation}
-                    >
-                      <Text style={styles.retryLocationButtonText}>Retry location</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : currentLocation ? (
-                  <>
-                    <Text style={styles.locationResolvedText}>
-                      Showing nearby {recommendationSpecialty} based on your current device location.
-                    </Text>
-                    <View style={styles.hospitalListShell}>
-                      <HospitalRecommendations
-                        lat={currentLocation.lat}
-                        lng={currentLocation.lng}
-                        specialty={recommendationSpecialty}
-                      />
-                    </View>
-                  </>
-                ) : null}
+                <Text style={styles.locationResolvedText}>
+                  MedVise will use your live device location in the next step to find nearby {recommendationSpecialty}.
+                </Text>
+                <TouchableOpacity
+                  style={styles.openRecommendationsButton}
+                  activeOpacity={0.84}
+                  onPress={() => setShowRecommendationPopup(true)}
+                >
+                  <Ionicons name="medkit-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.openRecommendationsButtonText}>
+                    View nearby options
+                  </Text>
+                </TouchableOpacity>
               </View>
             )}
           </View>
@@ -610,6 +554,12 @@ export default function PredictionDetailScreen() {
         onClose={() => {
           if (!submitting) setSheetVisible(false);
         }}
+      />
+
+      <HospitalRecommendationPopup
+        isVisible={showRecommendationPopup}
+        specialty={recommendationSpecialty}
+        onClose={() => setShowRecommendationPopup(false)}
       />
     </SafeAreaView>
   );
@@ -821,48 +771,25 @@ const styles = StyleSheet.create({
     color: "#64748B",
   },
   recommendationResultWrap: { marginTop: 16 },
-  locationState: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 18,
-    paddingHorizontal: 12,
-    backgroundColor: "#F8FAFC",
-    borderRadius: 16,
-  },
-  locationStateText: {
-    marginTop: 10,
-    fontSize: 14,
-    color: "#475569",
-    textAlign: "center",
-  },
-  locationErrorText: {
-    fontSize: 14,
-    lineHeight: 21,
-    color: "#B91C1C",
-    textAlign: "center",
-  },
-  retryLocationButton: {
-    marginTop: 14,
-    backgroundColor: "#0F766E",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  retryLocationButtonText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
   locationResolvedText: {
     fontSize: 13,
     lineHeight: 20,
     color: "#475569",
     marginBottom: 12,
   },
-  hospitalListShell: {
-    minHeight: 280,
-    marginHorizontal: -8,
-    marginBottom: -8,
+  openRecommendationsButton: {
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: "#0F766E",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  openRecommendationsButtonText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   footerButtons: { flexDirection: "row", gap: 12, marginTop: 2 },
   falseButton: {

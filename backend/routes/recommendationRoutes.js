@@ -1,0 +1,8 @@
+const express = require("express");
+const recommendationController = require("../controllers/recommendationController");
+
+const router = express.Router();
+
+router.post("/", recommendationController.createRecommendations);
+
+module.exports = router;

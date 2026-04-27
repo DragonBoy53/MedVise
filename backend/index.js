@@ -2,9 +2,11 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
+const os = require("os");
 const chatController = require("./controllers/chatController");
 const adminRoutes = require("./routes/adminRoutes");
 const predictionRoutes = require("./routes/predictionRoutes");
+const recommendationRoutes = require("./routes/recommendationRoutes");
 const { optionalAuth, requireAuth, requireRole } = require("./middleware/auth");
 
 const app = express();
@@ -13,7 +15,7 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-const upload = multer({ dest: "/tmp" });
+const upload = multer({ dest: os.tmpdir() });
 
 app.post("/api/register", async (req, res) => {
   res.status(410).json({
@@ -46,6 +48,7 @@ app.get("/api/admin/test", requireAuth, requireRole("admin"), async (req, res) =
 app.post("/api/chat", upload.single("image"), optionalAuth, chatController);
 app.use("/api/admin", adminRoutes);
 app.use("/api/predictions", predictionRoutes);
+app.use("/api/recommendations", recommendationRoutes);
 
 if (require.main === module) {
   app.listen(PORT, () => {
