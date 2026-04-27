@@ -76,6 +76,13 @@ const MODEL_OPTIONS = [
 
 type ModelKey = (typeof MODEL_OPTIONS)[number]["key"];
 
+type MetricCardData = {
+  key: string;
+  label: string;
+  value: string;
+  borderTopColor: string;
+};
+
 const DEFAULT_BASELINE_METRICS: BaselineMetrics = {
   accuracy: null,
   precision: null,
@@ -137,6 +144,15 @@ function normalizeMetricsResponse(payload: any): MetricsResponse {
     baseline: payload.baseline ?? DEFAULT_BASELINE_METRICS,
     live: payload.live ?? legacyLiveShape,
   };
+}
+
+function MetricCard({ item }: { item: MetricCardData }) {
+  return (
+    <View style={[styles.statCard, { borderTopColor: item.borderTopColor }]}>
+      <Text style={styles.statValue}>{item.value}</Text>
+      <Text style={styles.statLabel}>{item.label}</Text>
+    </View>
+  );
 }
 
 export default function MetricsScreen() {
@@ -207,6 +223,8 @@ export default function MetricsScreen() {
   const selectedModelOption =
     MODEL_OPTIONS.find((option) => option.key === selectedModel) || MODEL_OPTIONS[0];
 
+  const hasValue = (value: unknown) => value !== null && value !== undefined;
+
   const formatPercent = (value: number | null | undefined) =>
     value == null ? "N/A" : `${(value * 100).toFixed(1)}%`;
 
@@ -234,6 +252,108 @@ export default function MetricsScreen() {
   const baseline = metrics?.baseline ?? DEFAULT_BASELINE_METRICS;
   const live = metrics?.live ?? DEFAULT_LIVE_METRICS;
   const classMetricEntries = Object.entries(baseline.classMetrics || {});
+
+  const baselineCards: MetricCardData[] = [
+    hasValue(baseline.accuracy)
+      ? {
+          key: "baseline-accuracy",
+          label: "Accuracy",
+          value: formatPercent(baseline.accuracy),
+          borderTopColor: "#34C759",
+        }
+      : null,
+    hasValue(baseline.precision)
+      ? {
+          key: "baseline-precision",
+          label: "Precision",
+          value: formatPercent(baseline.precision),
+          borderTopColor: "#4A90E2",
+        }
+      : null,
+    hasValue(baseline.recall)
+      ? {
+          key: "baseline-recall",
+          label: "Recall",
+          value: formatPercent(baseline.recall),
+          borderTopColor: "#AF52DE",
+        }
+      : null,
+    hasValue(baseline.falseAlarmRate)
+      ? {
+          key: "baseline-false-alarm",
+          label: "False Alarm Rate",
+          value: formatPercent(baseline.falseAlarmRate),
+          borderTopColor: "#FF3B30",
+        }
+      : null,
+    hasValue(baseline.sampleSize) && baseline.sampleSize > 0
+      ? {
+          key: "baseline-sample",
+          label: "Evaluation Sample",
+          value: formatNumber(baseline.sampleSize),
+          borderTopColor: "#222",
+        }
+      : null,
+    hasValue(baseline.rocAuc)
+      ? {
+          key: "baseline-roc-auc",
+          label: "ROC-AUC",
+          value: formatPercent(baseline.rocAuc),
+          borderTopColor: "#FF9500",
+        }
+      : null,
+  ].filter(Boolean) as MetricCardData[];
+
+  const liveCards: MetricCardData[] = [
+    hasValue(live.accuracy)
+      ? {
+          key: "live-accuracy",
+          label: "Accuracy",
+          value: formatPercent(live.accuracy),
+          borderTopColor: "#34C759",
+        }
+      : null,
+    hasValue(live.precision)
+      ? {
+          key: "live-precision",
+          label: "Precision",
+          value: formatPercent(live.precision),
+          borderTopColor: "#4A90E2",
+        }
+      : null,
+    hasValue(live.recall)
+      ? {
+          key: "live-recall",
+          label: "Recall",
+          value: formatPercent(live.recall),
+          borderTopColor: "#AF52DE",
+        }
+      : null,
+    hasValue(live.falseAlarmRate)
+      ? {
+          key: "live-false-alarm",
+          label: "False Alarm Rate",
+          value: formatPercent(live.falseAlarmRate),
+          borderTopColor: "#FF3B30",
+        }
+      : null,
+    live.totalPredictions > 0
+      ? {
+          key: "live-total",
+          label: "Total Predictions",
+          value: live.totalPredictions.toLocaleString(),
+          borderTopColor: "#222",
+        }
+      : null,
+    live.sampleSize > 0
+      ? {
+          key: "live-sample",
+          label: "Labeled Cases",
+          value: live.sampleSize.toLocaleString(),
+          borderTopColor: "#FF9500",
+        }
+      : null,
+  ].filter(Boolean) as MetricCardData[];
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -301,57 +421,20 @@ export default function MetricsScreen() {
 
             <View style={styles.metricPanel}>
               <Text style={styles.panelTitle}>Notebook Evaluation Snapshot</Text>
-              <Text style={styles.panelMeta}>
-                Scope: {baseline.metricScope || "Not available"}
-              </Text>
-              <Text style={styles.panelMeta}>
-                Updated: {formatDate(baseline.updatedAt)}
-              </Text>
+              {baseline.metricScope ? (
+                <Text style={styles.panelMeta}>Scope: {baseline.metricScope}</Text>
+              ) : null}
+              {baseline.updatedAt ? (
+                <Text style={styles.panelMeta}>
+                  Updated: {formatDate(baseline.updatedAt)}
+                </Text>
+              ) : null}
             </View>
 
-            <View style={styles.row}>
-              <View style={[styles.statCard, { borderTopColor: "#34C759" }]}>
-                <Text style={styles.statValue}>
-                  {formatPercent(baseline.accuracy)}
-                </Text>
-                <Text style={styles.statLabel}>Accuracy</Text>
-              </View>
-              <View style={[styles.statCard, { borderTopColor: "#4A90E2" }]}>
-                <Text style={styles.statValue}>
-                  {formatPercent(baseline.precision)}
-                </Text>
-                <Text style={styles.statLabel}>Precision</Text>
-              </View>
-            </View>
-
-            <View style={styles.row}>
-              <View style={[styles.statCard, { borderTopColor: "#AF52DE" }]}>
-                <Text style={styles.statValue}>
-                  {formatPercent(baseline.recall)}
-                </Text>
-                <Text style={styles.statLabel}>Recall</Text>
-              </View>
-              <View style={[styles.statCard, { borderTopColor: "#FF3B30" }]}>
-                <Text style={styles.statValue}>
-                  {formatPercent(baseline.falseAlarmRate)}
-                </Text>
-                <Text style={styles.statLabel}>False Alarm Rate</Text>
-              </View>
-            </View>
-
-            <View style={styles.row}>
-              <View style={[styles.statCard, { borderTopColor: "#222" }]}>
-                <Text style={styles.statValue}>
-                  {formatNumber(baseline.sampleSize)}
-                </Text>
-                <Text style={styles.statLabel}>Evaluation Sample</Text>
-              </View>
-              <View style={[styles.statCard, { borderTopColor: "#FF9500" }]}>
-                <Text style={styles.statValue}>
-                  {formatPercent(baseline.rocAuc)}
-                </Text>
-                <Text style={styles.statLabel}>ROC-AUC</Text>
-              </View>
+            <View style={styles.metricGrid}>
+              {baselineCards.map((item) => (
+                <MetricCard key={item.key} item={item} />
+              ))}
             </View>
 
             {baseline.note ? (
@@ -380,56 +463,23 @@ export default function MetricsScreen() {
 
             <View style={styles.metricPanel}>
               <Text style={styles.panelTitle}>Real App Predictions</Text>
-              <Text style={styles.panelMeta}>
-                Evaluation window: {formatDate(live.windowStart)} to{" "}
-                {formatDate(live.windowEnd)}
-              </Text>
-              <Text style={styles.panelMeta}>
-                Last updated: {formatDate(live.lastUpdated)}
-              </Text>
+              {live.windowStart && live.windowEnd ? (
+                <Text style={styles.panelMeta}>
+                  Evaluation window: {formatDate(live.windowStart)} to{" "}
+                  {formatDate(live.windowEnd)}
+                </Text>
+              ) : null}
+              {live.lastUpdated ? (
+                <Text style={styles.panelMeta}>
+                  Last updated: {formatDate(live.lastUpdated)}
+                </Text>
+              ) : null}
             </View>
 
-            <View style={styles.row}>
-              <View style={[styles.statCard, { borderTopColor: "#34C759" }]}>
-                <Text style={styles.statValue}>
-                  {formatPercent(live.accuracy)}
-                </Text>
-                <Text style={styles.statLabel}>Accuracy</Text>
-              </View>
-              <View style={[styles.statCard, { borderTopColor: "#4A90E2" }]}>
-                <Text style={styles.statValue}>
-                  {formatPercent(live.precision)}
-                </Text>
-                <Text style={styles.statLabel}>Precision</Text>
-              </View>
-            </View>
-
-            <View style={styles.row}>
-              <View style={[styles.statCard, { borderTopColor: "#AF52DE" }]}>
-                <Text style={styles.statValue}>{formatPercent(live.recall)}</Text>
-                <Text style={styles.statLabel}>Recall</Text>
-              </View>
-              <View style={[styles.statCard, { borderTopColor: "#FF3B30" }]}>
-                <Text style={styles.statValue}>
-                  {formatPercent(live.falseAlarmRate)}
-                </Text>
-                <Text style={styles.statLabel}>False Alarm Rate</Text>
-              </View>
-            </View>
-
-            <View style={styles.row}>
-              <View style={[styles.statCard, { borderTopColor: "#222" }]}>
-                <Text style={styles.statValue}>
-                  {live.totalPredictions.toLocaleString()}
-                </Text>
-                <Text style={styles.statLabel}>Total Predictions</Text>
-              </View>
-              <View style={[styles.statCard, { borderTopColor: "#FF9500" }]}>
-                <Text style={styles.statValue}>
-                  {live.sampleSize.toLocaleString()}
-                </Text>
-                <Text style={styles.statLabel}>Labeled Cases</Text>
-              </View>
+            <View style={styles.metricGrid}>
+              {liveCards.map((item) => (
+                <MetricCard key={item.key} item={item} />
+              ))}
             </View>
 
             {live.note ? (
@@ -589,8 +639,13 @@ const styles = StyleSheet.create({
   panelTitle: { color: "#111", fontSize: 15, fontWeight: "700" },
   panelMeta: { color: "#666", fontSize: 12, lineHeight: 18 },
   row: { flexDirection: "row", gap: 14 },
+  metricGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 14,
+  },
   statCard: {
-    flex: 1,
+    width: "47%",
     backgroundColor: "#f9f9f9",
     borderRadius: 14,
     padding: 18,

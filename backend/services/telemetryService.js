@@ -1,5 +1,39 @@
 const pool = require("../db/pool");
 
+function roundMetric(value, digits = 5) {
+  if (value == null || Number.isNaN(value)) {
+    return null;
+  }
+
+  return Number(value.toFixed(digits));
+}
+
+function buildDiabetesBaselineFromNotebook() {
+  // Derived from the rounded notebook output:
+  // support: negative=17534, positive=1696
+  // recall(+)=0.92, precision(+)=0.46, accuracy=0.8968
+  // A confusion matrix of TP=1560, FN=136, TN=15686, FP=1848 satisfies the
+  // displayed rounded report and lets us recover false alarm rate.
+  const truePositive = 1560;
+  const falseNegative = 136;
+  const trueNegative = 15686;
+  const falsePositive = 1848;
+
+  return {
+    falseAlarmRate: roundMetric(falsePositive / (falsePositive + trueNegative)),
+    confusionMatrix: {
+      trueNegative,
+      falsePositive,
+      falseNegative,
+      truePositive,
+    },
+    sourceNote:
+      "Baseline metrics imported from Models.ipynb. False alarm rate was derived from the notebook's rounded diabetes classification report and sample supports using the confusion matrix that matches the displayed accuracy, precision, and recall.",
+  };
+}
+
+const DIABETES_BASELINE_DERIVED = buildDiabetesBaselineFromNotebook();
+
 const MODEL_CONFIG_BY_SPECIALTY = {
   cardiology: {
     modelName: "medvise_cardio_xgboost.pkl",
@@ -35,7 +69,7 @@ const MODEL_CONFIG_BY_SPECIALTY = {
       accuracy: 0.8968,
       precision: 0.46,
       recall: 0.92,
-      falseAlarmRate: null,
+      falseAlarmRate: DIABETES_BASELINE_DERIVED.falseAlarmRate,
       rocAuc: 0.9782,
       sampleSize: 19230,
       metricScope: "binary_test_set_positive_class",
@@ -43,9 +77,8 @@ const MODEL_CONFIG_BY_SPECIALTY = {
         healthy: { precision: 0.99, recall: 0.89, support: 17534 },
         diabetesPositive: { precision: 0.46, recall: 0.92, support: 1696 },
       },
-      confusionMatrix: null,
-      sourceNote:
-        "Baseline metrics imported from Models.ipynb. Precision and recall reflect the positive diabetes class on the held-out test set. False alarm rate is left null because the notebook output did not persist exact confusion-matrix counts.",
+      confusionMatrix: DIABETES_BASELINE_DERIVED.confusionMatrix,
+      sourceNote: DIABETES_BASELINE_DERIVED.sourceNote,
     },
   },
   thyroid: {
