@@ -15,7 +15,9 @@ function validateRecommendationInput({ lat, lng, specialty }) {
   }
 
   if (longitude == null || longitude < -180 || longitude > 180) {
-    const error = new Error("lng must be a valid longitude between -180 and 180.");
+    const error = new Error(
+      "lng must be a valid longitude between -180 and 180.",
+    );
     error.code = "INVALID_LONGITUDE";
     throw error;
   }
@@ -35,37 +37,40 @@ function validateRecommendationInput({ lat, lng, specialty }) {
 
 async function searchRecommendations({ lat, lng, specialty }) {
   const validatedInput = validateRecommendationInput({ lat, lng, specialty });
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  const apiKey = process.env.PLACES_API;
 
   // Common production issue: the Places API request will fail immediately if
-  // GOOGLE_MAPS_API_KEY is missing or the Places API (New) is not enabled.
+  // PLACES_API is missing or the Places API (New) is not enabled.
   if (!apiKey) {
-    const error = new Error("GOOGLE_MAPS_API_KEY is not configured.");
-    error.code = "MISSING_GOOGLE_MAPS_API_KEY";
+    const error = new Error("PLACES_API is not configured.");
+    error.code = "MISSING_PLACES_API";
     throw error;
   }
 
-  const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask":
-        "places.displayName,places.formattedAddress,places.rating,places.nationalPhoneNumber,places.currentOpeningHours.openNow",
-    },
-    body: JSON.stringify({
-      textQuery: `${validatedInput.specialty} clinic or hospital`,
-      locationBias: {
-        circle: {
-          center: {
-            latitude: validatedInput.lat,
-            longitude: validatedInput.lng,
-          },
-          radius: 5000.0,
-        },
+  const response = await fetch(
+    "https://places.googleapis.com/v1/places:searchText",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask":
+          "places.displayName,places.formattedAddress,places.rating,places.nationalPhoneNumber,places.currentOpeningHours.openNow",
       },
-    }),
-  });
+      body: JSON.stringify({
+        textQuery: `${validatedInput.specialty} clinic or hospital`,
+        locationBias: {
+          circle: {
+            center: {
+              latitude: validatedInput.lat,
+              longitude: validatedInput.lng,
+            },
+            radius: 5000.0,
+          },
+        },
+      }),
+    },
+  );
 
   let payload;
   try {
@@ -92,7 +97,9 @@ async function searchRecommendations({ lat, lng, specialty }) {
           name: place?.displayName?.text || "Unknown location",
           address: place?.formattedAddress || "Address unavailable",
           rating:
-            typeof place?.rating === "number" ? Number(place.rating.toFixed(1)) : null,
+            typeof place?.rating === "number"
+              ? Number(place.rating.toFixed(1))
+              : null,
           phone: place?.nationalPhoneNumber || null,
           isOpen:
             typeof place?.currentOpeningHours?.openNow === "boolean"

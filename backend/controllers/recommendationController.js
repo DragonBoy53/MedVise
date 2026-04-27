@@ -3,7 +3,11 @@ const { searchRecommendations } = require("../services/recommendationService");
 async function createRecommendations(req, res) {
   try {
     const { lat, lng, specialty } = req.body || {};
-    const recommendations = await searchRecommendations({ lat, lng, specialty });
+    const recommendations = await searchRecommendations({
+      lat,
+      lng,
+      specialty,
+    });
 
     return res.json({
       recommendations,
@@ -23,8 +27,8 @@ async function createRecommendations(req, res) {
     // invalid field mask, disabled API, billing problem, or a missing API key.
     return res.status(500).json({
       message:
-        error.code === "MISSING_GOOGLE_MAPS_API_KEY"
-          ? "Server configuration is incomplete. GOOGLE_MAPS_API_KEY is missing."
+        error.code === "MISSING_PLACES_API"
+          ? "Server configuration is incomplete. PLACES_API is missing."
           : "Failed to fetch hospital recommendations.",
     });
   }
