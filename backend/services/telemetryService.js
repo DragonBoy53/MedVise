@@ -251,9 +251,15 @@ async function createPredictionEvent({
       clerkUserId,
       specialty,
       toolResult?.label || "Unknown",
-      Number.isInteger(toolResult?.prediction) ? toolResult.prediction : null,
+      Number.isInteger(toolResult?.prediction)
+        ? toolResult.prediction
+        : Number.isInteger(toolResult?.predicted_value)
+          ? toolResult.predicted_value
+          : null,
       JSON.stringify(mapProbabilities(specialty, toolResult)),
+      // Persist the exact feature payload sent to the ML inference service.
       JSON.stringify(extractedFeatures || {}),
+      // Persist the raw inference response returned from Render for auditability.
       JSON.stringify(toolResult || {}),
       latencyMs || null,
     ],

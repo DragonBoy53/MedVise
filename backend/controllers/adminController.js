@@ -63,6 +63,56 @@ async function getMetricsOverview(req, res) {
   }
 }
 
+async function generateMetricsSnapshot(req, res) {
+  try {
+    const { modelVersionId, windowStart, windowEnd } = req.body;
+
+    if (!Number.isInteger(Number(modelVersionId))) {
+      return res.status(400).json({
+        message: "modelVersionId is required and must be an integer.",
+      });
+    }
+
+    const parsedWindowStart = new Date(windowStart);
+    const parsedWindowEnd = new Date(windowEnd);
+
+    if (
+      Number.isNaN(parsedWindowStart.getTime()) ||
+      Number.isNaN(parsedWindowEnd.getTime())
+    ) {
+      return res.status(400).json({
+        message: "windowStart and windowEnd must be valid ISO-8601 timestamps.",
+      });
+    }
+
+    if (parsedWindowStart > parsedWindowEnd) {
+      return res.status(400).json({
+        message: "windowStart must be earlier than or equal to windowEnd.",
+      });
+    }
+
+    const snapshot = await adminService.generateAndSaveMetricsSnapshot(
+      Number(modelVersionId),
+      parsedWindowStart.toISOString(),
+      parsedWindowEnd.toISOString(),
+    );
+
+    return res.status(201).json({
+      message: "Metric snapshot generated successfully.",
+      snapshot,
+    });
+  } catch (error) {
+    console.error("[adminController.generateMetricsSnapshot]", error);
+    if (error.code === "SCHEMA_NOT_READY") {
+      return res.status(503).json({
+        message:
+          "Admin database schema is not installed yet. Run backend/sql/admin_portal_schema.sql first.",
+      });
+    }
+    return res.status(500).json({ message: "Failed to generate metric snapshot." });
+  }
+}
+
 async function listBackups(req, res) {
   try {
     const backups = await adminService.listBackupJobs();
@@ -226,6 +276,7 @@ module.exports = {
   verifyTwoFactorSetup,
   verifyTwoFactorChallenge,
   getMetricsOverview,
+  generateMetricsSnapshot,
   listBackups,
   createBackup,
   createRecovery,

@@ -31,6 +31,7 @@ router.use(requireAuth, requireRole("admin"), requireAdminMfa);
 
 router.get("/", adminController.getAdminDashboard);
 router.get("/metrics", adminController.getMetricsOverview);
+router.post("/metrics/snapshots", adminController.generateMetricsSnapshot);
 router.get("/backups", adminController.listBackups);
 router.post("/backup", adminController.createBackup);
 router.post("/recovery", adminController.createRecovery);

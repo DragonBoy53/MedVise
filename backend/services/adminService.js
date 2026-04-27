@@ -1,5 +1,9 @@
 const pool = require("../db/pool");
 const { ensureModelVersion } = require("./telemetryService");
+const {
+  calculateConfusionMatrix,
+  calculateAUC,
+} = require("../utils/metricsCalculator");
 const VALID_SPECIALTIES = ["cardiology", "diabetes", "thyroid"];
 
 function isUndefinedTableError(error) {
@@ -78,6 +82,28 @@ function toNumberOrNull(value) {
 
   const numericValue = Number(value);
   return Number.isNaN(numericValue) ? null : numericValue;
+}
+
+function normalizeBinaryClass(value) {
+  return Number(value) === 1 ? 1 : 0;
+}
+
+function extractPositiveClassProbability(probabilities) {
+  if (!probabilities || typeof probabilities !== "object") {
+    return null;
+  }
+
+  const positive = Number(probabilities.positive);
+  if (Number.isFinite(positive)) {
+    return positive;
+  }
+
+  const classOne = Number(probabilities.class_1);
+  if (Number.isFinite(classOne)) {
+    return classOne;
+  }
+
+  return null;
 }
 
 function buildDefaultBaselineMetrics(note, schemaReady = true) {
@@ -367,6 +393,111 @@ async function getMetricsOverview(specialtyInput) {
   }
 }
 
+async function generateAndSaveMetricsSnapshot(modelVersionId, windowStart, windowEnd) {
+  try {
+    const metricsResult = await pool.query(
+      `
+        -- Join prediction events to ground truth so each row contains both the
+        -- model output and the verified outcome for the same prediction.
+        SELECT
+          pe.id AS prediction_event_id,
+          pe.predicted_value AS predicted_value,
+          pe.probabilities_json AS probabilities,
+          pgt.actual_value AS actual_value
+        FROM prediction_events pe
+        INNER JOIN prediction_ground_truth pgt
+          ON pgt.prediction_event_id = pe.id
+        WHERE pe.model_version_id = $1
+          AND pe.created_at >= $2
+          AND pe.created_at <= $3
+        ORDER BY pe.created_at ASC, pe.id ASC
+      `,
+      [modelVersionId, windowStart, windowEnd],
+    );
+
+    const metricRows = metricsResult.rows
+      .map((row) => {
+        const probability = extractPositiveClassProbability(row.probabilities);
+
+        if (row.actual_value == null || (row.predicted_value == null && probability == null)) {
+          return null;
+        }
+
+        return {
+          actual: normalizeBinaryClass(row.actual_value),
+          predicted:
+            row.predicted_value == null ? null : normalizeBinaryClass(row.predicted_value),
+          probability,
+        };
+      })
+      .filter(Boolean);
+
+    const confusion = calculateConfusionMatrix(metricRows);
+    const rocAuc = calculateAUC(metricRows);
+
+    const snapshotResult = await pool.query(
+      `
+        -- Persist the snapshot window and confusion-matrix-derived metrics so the
+        -- dashboard can render a point-in-time evaluation without recomputing.
+        INSERT INTO metric_snapshots (
+          model_version_id,
+          window_start,
+          window_end,
+          accuracy,
+          precision,
+          recall,
+          false_alarm_rate,
+          sample_size,
+          confusion_matrix_json
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+        RETURNING
+          id,
+          model_version_id AS "modelVersionId",
+          window_start AS "windowStart",
+          window_end AS "windowEnd",
+          accuracy,
+          precision,
+          recall,
+          false_alarm_rate AS "falseAlarmRate",
+          sample_size AS "sampleSize",
+          confusion_matrix_json AS "confusionMatrix",
+          created_at AS "createdAt"
+      `,
+      [
+        modelVersionId,
+        windowStart,
+        windowEnd,
+        confusion.accuracy ?? 0,
+        confusion.precision ?? 0,
+        confusion.recall ?? 0,
+        confusion.falseAlarmRate ?? 0,
+        confusion.sampleSize,
+        JSON.stringify({
+          truePositive: confusion.truePositive,
+          falsePositive: confusion.falsePositive,
+          falseNegative: confusion.falseNegative,
+          trueNegative: confusion.trueNegative,
+        }),
+      ],
+    );
+
+    return {
+      ...snapshotResult.rows[0],
+      rocAuc,
+      note:
+        rocAuc == null
+          ? "AUC-ROC was calculated in memory but not persisted because metric_snapshots does not currently include a roc_auc column."
+          : null,
+    };
+  } catch (error) {
+    if (isUndefinedTableError(error)) {
+      error.code = "SCHEMA_NOT_READY";
+    }
+    throw error;
+  }
+}
+
 async function listBackupJobs() {
   try {
     const result = await pool.query(`
@@ -644,6 +775,7 @@ async function upsertPredictionGroundTruth({
 module.exports = {
   getAdminSummary,
   getMetricsOverview,
+  generateAndSaveMetricsSnapshot,
   listBackupJobs,
   createBackupJob,
   createRecoveryJob,
