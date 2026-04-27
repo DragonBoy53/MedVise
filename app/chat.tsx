@@ -77,6 +77,57 @@ function resolveRecommendationSpecialty(prediction: any): string {
   return "general hospital";
 }
 
+function RecommendationPromptModal({
+  visible,
+  specialty,
+  onYes,
+  onNo,
+}: {
+  visible: boolean;
+  specialty: string;
+  onYes: () => void;
+  onNo: () => void;
+}) {
+  return (
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onNo}>
+      <View style={styles.recommendModalOverlay}>
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={onNo}
+        />
+        <View style={styles.recommendModalCard}>
+          <View style={styles.recommendModalIconWrap}>
+            <Ionicons name="medkit-outline" size={24} color="#0F766E" />
+          </View>
+          <Text style={styles.recommendModalTitle}>Recommend nearby hospital?</Text>
+          <Text style={styles.recommendModalSubtitle}>
+            MedVise can use your live location to find nearby {specialty} for this
+            unhealthy prediction.
+          </Text>
+          <View style={styles.recommendModalActions}>
+            <TouchableOpacity
+              style={styles.recommendModalNoBtn}
+              activeOpacity={0.84}
+              onPress={onNo}
+            >
+              <Text style={styles.recommendModalNoBtnText}>No</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.recommendModalYesBtn}
+              activeOpacity={0.84}
+              onPress={onYes}
+            >
+              <Ionicons name="location-outline" size={16} color="#fff" />
+              <Text style={styles.recommendModalYesBtnText}>Yes, find nearby</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ChatScreen() {
@@ -85,11 +136,14 @@ export default function ChatScreen() {
   const [input, setInput] = useState("");
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [isSending, setIsSending] = useState(false);
 
   // Hospital recommendation state
   const [unhealthyPrediction, setUnhealthyPrediction] = useState<any>(null);
   const [wantsRecommendations, setWantsRecommendations] = useState<boolean | null>(null);
   const [showRecommendationPopup, setShowRecommendationPopup] = useState(false);
+  const [showRecommendationPrompt, setShowRecommendationPrompt] = useState(false);
+  const activeRequestControllerRef = useRef<AbortController | null>(null);
 
   const pulseScale = useRef(new Animated.Value(1)).current;
   const pulseOpacity = useRef(new Animated.Value(0.6)).current;
@@ -150,10 +204,11 @@ export default function ChatScreen() {
   // ── Send message ──────────────────────────────────────────────────────────
 
   const sendMessage = async () => {
-    if (!input.trim() && !selectedImage) return;
+    if (isSending || (!input.trim() && !selectedImage)) return;
 
     const currentInput = input;
     const currentImage = selectedImage;
+    const requestController = new AbortController();
 
     const newMsg: Message = {
       id: Date.now().toString(),
@@ -166,6 +221,8 @@ export default function ChatScreen() {
     setMessages((m) => [newMsg, ...m]);
     setInput("");
     setSelectedImage(null);
+    setIsSending(true);
+    activeRequestControllerRef.current = requestController;
     Keyboard.dismiss();
 
     try {
@@ -189,6 +246,7 @@ export default function ChatScreen() {
           "Content-Type": "multipart/form-data",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
+        signal: requestController.signal,
       });
 
       const botMsg: Message = {
@@ -207,10 +265,32 @@ export default function ChatScreen() {
         setUnhealthyPrediction(prediction);
         setWantsRecommendations(null);
         setShowRecommendationPopup(false);
+        setShowRecommendationPrompt(true);
       }
     } catch (error: any) {
+      if (
+        error?.name === "CanceledError" ||
+        error?.code === "ERR_CANCELED" ||
+        error?.message === "canceled"
+      ) {
+        setMessages((existing) =>
+          existing.filter((message) => message.id !== newMsg.id),
+        );
+        return;
+      }
+
       console.error("Chat Error:", error);
       Alert.alert("Error", "Could not connect to MedVise AI.");
+      setMessages((existing) =>
+        existing.filter((message) => message.id !== newMsg.id),
+      );
+      setInput(currentInput);
+      setSelectedImage(currentImage);
+    } finally {
+      setIsSending(false);
+      if (activeRequestControllerRef.current === requestController) {
+        activeRequestControllerRef.current = null;
+      }
     }
   };
 
@@ -257,6 +337,16 @@ export default function ChatScreen() {
   };
 
   // ── Render helpers ────────────────────────────────────────────────────────
+
+  const cancelActiveRequest = useCallback(() => {
+    activeRequestControllerRef.current?.abort();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      activeRequestControllerRef.current?.abort();
+    };
+  }, []);
 
   const renderMessage = ({ item }: { item: Message }) => (
     <View
@@ -329,7 +419,7 @@ export default function ChatScreen() {
           />
 
           {/* ── Hospital Recommendation Banner ── */}
-          {unhealthyPrediction && (
+          {unhealthyPrediction && wantsRecommendations && (
             <View style={styles.recommendationBanner}>
               <View style={styles.recommendationBannerHeader}>
                 <View style={styles.recommendationIconWrap}>
@@ -345,56 +435,19 @@ export default function ChatScreen() {
                   </Text>
                 </View>
               </View>
-
-              {wantsRecommendations == null && (
-                <View style={styles.recommendationActions}>
-                  <TouchableOpacity
-                    style={styles.recommendNoBtn}
-                    onPress={() => {
-                      setWantsRecommendations(false);
-                      setUnhealthyPrediction(null);
-                    }}
-                  >
-                    <Text style={styles.recommendNoBtnText}>No thanks</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.recommendYesBtn}
-                    onPress={() => {
-                      setWantsRecommendations(true);
-                      setShowRecommendationPopup(true);
-                    }}
-                  >
-                    <Ionicons name="location-outline" size={16} color="#fff" />
-                    <Text style={styles.recommendYesBtnText}>
-                      Yes, find nearby
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {wantsRecommendations === false && (
-                <Text style={styles.recommendDismissedText}>
-                  You can still consult a clinician if your symptoms worsen.
+              <Text style={styles.locationResolvedText}>
+                MedVise will request your live location in the next step and
+                find nearby {recommendationSpecialty}.
+              </Text>
+              <TouchableOpacity
+                style={styles.openRecommendationsButton}
+                onPress={() => setShowRecommendationPopup(true)}
+              >
+                <Ionicons name="medkit-outline" size={16} color="#fff" />
+                <Text style={styles.openRecommendationsButtonText}>
+                  View nearby options
                 </Text>
-              )}
-
-              {wantsRecommendations && (
-                <>
-                  <Text style={styles.locationResolvedText}>
-                    MedVise will request your live location in the next step and
-                    find nearby {recommendationSpecialty}.
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.openRecommendationsButton}
-                    onPress={() => setShowRecommendationPopup(true)}
-                  >
-                    <Ionicons name="medkit-outline" size={16} color="#fff" />
-                    <Text style={styles.openRecommendationsButtonText}>
-                      View nearby options
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              )}
+              </TouchableOpacity>
             </View>
           )}
 
@@ -419,11 +472,17 @@ export default function ChatScreen() {
               <TouchableOpacity
                 style={styles.iconBtn}
                 onPress={() => {
+                  if (isSending) return;
                   Keyboard.dismiss();
                   setShowAttachMenu(true);
                 }}
+                disabled={isSending}
               >
-                <Ionicons name="add-circle-outline" size={28} color="#444" />
+                <Ionicons
+                  name="add-circle-outline"
+                  size={28}
+                  color={isSending ? "#B6BEC9" : "#444"}
+                />
               </TouchableOpacity>
 
               <TextInput
@@ -433,28 +492,62 @@ export default function ChatScreen() {
                 placeholderTextColor="#666"
                 style={styles.input}
                 multiline
+                editable={!isSending}
               />
 
               <TouchableOpacity
                 style={[
                   styles.sendBtn,
-                  !input.trim() && !selectedImage
+                  isSending
+                    ? styles.cancelBtn
+                    : !input.trim() && !selectedImage
                     ? styles.sendBtnDisabled
                     : styles.sendBtnEnabled,
                 ]}
-                onPress={sendMessage}
-                disabled={!input.trim() && !selectedImage}
+                onPress={isSending ? cancelActiveRequest : sendMessage}
+                disabled={!isSending && !input.trim() && !selectedImage}
               >
-                <Ionicons name="arrow-up" size={20} color="#fff" />
+                {isSending ? (
+                  <Ionicons name="close" size={20} color="#fff" />
+                ) : (
+                  <Ionicons name="arrow-up" size={20} color="#fff" />
+                )}
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.iconBtn}>
-                <Ionicons name="mic-outline" size={22} color="#444" />
+              <TouchableOpacity style={styles.iconBtn} disabled={isSending}>
+                <Ionicons
+                  name="mic-outline"
+                  size={22}
+                  color={isSending ? "#B6BEC9" : "#444"}
+                />
               </TouchableOpacity>
             </View>
+            {isSending ? (
+              <View style={styles.sendingStateRow}>
+                <ActivityIndicator size="small" color="#0F766E" />
+                <Text style={styles.sendingStateText}>
+                  Waiting for MedVise to reply. Cancel to send another message.
+                </Text>
+              </View>
+            ) : null}
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      <RecommendationPromptModal
+        visible={showRecommendationPrompt && Boolean(unhealthyPrediction)}
+        specialty={recommendationSpecialty}
+        onNo={() => {
+          setShowRecommendationPrompt(false);
+          setWantsRecommendations(false);
+          setUnhealthyPrediction(null);
+        }}
+        onYes={() => {
+          setShowRecommendationPrompt(false);
+          setWantsRecommendations(true);
+          setShowRecommendationPopup(true);
+        }}
+      />
 
       <HospitalRecommendationPopup
         isVisible={showRecommendationPopup}
@@ -976,6 +1069,20 @@ const styles = StyleSheet.create({
   },
   sendBtnEnabled: { backgroundColor: "#000000ff" },
   sendBtnDisabled: { backgroundColor: "#E0E0E0" },
+  cancelBtn: { backgroundColor: "#EF4444" },
+  sendingStateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingBottom: 10,
+  },
+  sendingStateText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#64748B",
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
@@ -1000,6 +1107,77 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   attachText: { fontSize: 13, color: "#333", fontWeight: "500" },
+  recommendModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.42)",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  recommendModalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: "#E7EEF4",
+  },
+  recommendModalIconWrap: {
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    backgroundColor: "#E6FFFB",
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
+    marginBottom: 14,
+  },
+  recommendModalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111827",
+    textAlign: "center",
+  },
+  recommendModalSubtitle: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: "#64748B",
+    textAlign: "center",
+    marginTop: 8,
+  },
+  recommendModalActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 18,
+  },
+  recommendModalNoBtn: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F8FAFC",
+  },
+  recommendModalNoBtnText: {
+    color: "#475569",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  recommendModalYesBtn: {
+    flex: 1.4,
+    minHeight: 46,
+    borderRadius: 14,
+    backgroundColor: "#0F766E",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  recommendModalYesBtnText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontSize: 14,
+  },
 
   // ── Recommendation banner ──
   recommendationBanner: {
@@ -1034,47 +1212,6 @@ const styles = StyleSheet.create({
     color: "#64748B",
     marginTop: 4,
     lineHeight: 19,
-  },
-  recommendationActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 12,
-  },
-  recommendNoBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F8FAFC",
-  },
-  recommendNoBtnText: {
-    color: "#475569",
-    fontWeight: "600",
-    fontSize: 14,
-  },
-  recommendYesBtn: {
-    flex: 1.5,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: "#0F766E",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  recommendYesBtnText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  recommendDismissedText: {
-    marginTop: 12,
-    fontSize: 13,
-    lineHeight: 20,
-    color: "#64748B",
   },
   locationResolvedText: {
     fontSize: 13,
