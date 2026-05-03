@@ -1,5 +1,6 @@
 import { useOAuth, useSignIn } from "@clerk/clerk-expo";
 import { AntDesign } from "@expo/vector-icons";
+import * as AuthSession from "expo-auth-session";
 import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -113,51 +114,60 @@ export default function LoginScreen() {
       i = (i + 1) % texts.length;
     }
   };
-  const handleLogin = async () => {
-    if (!isLoaded) return;
-    if (!email || !password) {
-      setError("Please enter email and password.");
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const signInAttempt = await signIn.create({
-        identifier: email,
-        password,
-      });
-      if (signInAttempt.status === "complete") {
-        await setActive({ session: signInAttempt.createdSessionId });
-        setLoading(false);
-        router.replace("/");
-      } else {
-        setLoading(false);
-        setError("Login incomplete. Additional steps required.");
-      }
-    } catch (err: any) {
+const handleLogin = async () => {
+  if (!isLoaded) return;
+  if (!email || !password) {
+    setError("Please enter email and password.");
+    return;
+  }
+
+  setLoading(true); 
+  setError(null);
+
+  try {
+    const signInAttempt = await signIn.create({
+      identifier: email,
+      password,
+    });
+
+    if (signInAttempt.status === "complete") {
+     
+      await setActive({ session: signInAttempt.createdSessionId });
+      
       setLoading(false);
-      if (err.errors && err.errors.length > 0) {
-        setError(err.errors[0].message || "Invalid credentials");
-      } else {
-        setError("An unknown error occurred.");
-      }
+      router.replace("/"); 
+    } else {
+      setLoading(false);
+      setError("Login incomplete. Additional steps required.");
     }
-  };
-
-  const handleGoogleLogin = useCallback(async () => {
-    try {
-      const { createdSessionId, signIn, signUp, setActive } =
-        await startOAuthFlow();
-
-      if (createdSessionId) {
-        setActive?.({ session: createdSessionId });
-        router.replace("/");
-      }
-    } catch (err) {
-      console.error("OAuth error", err);
-      setError("Google Sign-In failed or was cancelled.");
+  } catch (err: any) {
+    setLoading(false);
+    if (err.errors && err.errors.length > 0) {
+      setError(err.errors[0].message || "Invalid credentials");
+    } else {
+      setError("An unknown error occurred.");
     }
-  }, []);
+  }
+};
+
+
+const handleGoogleLogin = useCallback(async () => {
+  try {
+    const { createdSessionId, setActive } = await startOAuthFlow({
+      redirectUrl: AuthSession.makeRedirectUri({
+        scheme: 'medvise-app', // This MUST match the scheme in your app.json
+      }),
+    });
+
+    if (createdSessionId && setActive) {
+      await setActive({ session: createdSessionId });
+      router.replace("/"); 
+    }
+  } catch (err) {
+    console.error("OAuth error", err);
+    setError("Google Sign-In failed or was cancelled.");
+  }
+}, [startOAuthFlow, router]);
 
   return (
     <KeyboardAvoidingView

@@ -1,6 +1,5 @@
 import axios from "axios";
 import * as SecureStore from "expo-secure-store";
-import { useAuth } from "@clerk/clerk-expo";
 
 const API_BASE_URL = "https://med-vise.vercel.app/";
 
@@ -21,7 +20,6 @@ export const setupClerkToken = async (getToken) => {
   return false;
 };
 
-// Legacy method (keep for backward compatibility)
 export const setAuthToken = async (token) => {
   if (token) {
     apiClient.defaults.headers.common["Authorization"] = `Bearer ${token}`;
