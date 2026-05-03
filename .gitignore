@@ -36,6 +36,11 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
+backend/.env
+
+# Claude Code workspace
+.claude/
 
 # typescript
 *.tsbuildinfo
