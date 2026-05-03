@@ -225,6 +225,12 @@ export default function ChatScreen() {
     activeRequestControllerRef.current = requestController;
     Keyboard.dismiss();
 
+    const history = messages
+      .filter((m) => typeof m.text === "string" && m.text.trim().length > 0)
+      .slice(0, 20)
+      .reverse()
+      .map((m) => ({ role: m.fromUser ? "user" : "model", text: m.text }));
+
     try {
       const token = await getToken();
       const formData = new FormData();
@@ -232,6 +238,8 @@ export default function ChatScreen() {
       if (currentInput.trim()) {
         formData.append("message", currentInput);
       }
+
+      formData.append("history", JSON.stringify(history));
 
       if (currentImage) {
         const filename = currentImage.split("/").pop();

@@ -42,12 +42,33 @@ async function dispatchTool(name, args) {
   }
 }
 
+function parseHistory(rawHistory) {
+  if (!rawHistory) return [];
+  let parsed;
+  try {
+    parsed = typeof rawHistory === "string" ? JSON.parse(rawHistory) : rawHistory;
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed
+    .map((turn) => {
+      const role = turn?.role === "model" ? "model" : turn?.role === "user" ? "user" : null;
+      const text = typeof turn?.text === "string" ? turn.text.trim() : "";
+      if (!role || !text) return null;
+      return { role, parts: [{ text }] };
+    })
+    .filter(Boolean);
+}
+
 async function chatController(req, res) {
   const file = req.file;
 
   try {
     const message = req.body.message || "";
     const promptText = message || (file ? "Please analyze this medical image." : "Hello");
+    const history = parseHistory(req.body.history);
 
     let messagePayload;
 
@@ -69,6 +90,7 @@ async function chatController(req, res) {
     const chat = ai.chats.create({
       model: MODEL_NAME,
       config: { systemInstruction: SYSTEM_INSTRUCTION, tools },
+      history,
     });
 
     // 1. Send the initial user message
