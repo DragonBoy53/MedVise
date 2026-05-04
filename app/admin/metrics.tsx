@@ -360,7 +360,7 @@ export default function MetricsScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.replace("/")} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#444" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Model Performance</Text>
