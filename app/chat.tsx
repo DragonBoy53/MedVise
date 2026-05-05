@@ -26,6 +26,7 @@ import Markdown from "react-native-markdown-display";
 import { SafeAreaView } from "react-native-safe-area-context";
 import apiClient from "../api/client";
 import HospitalRecommendationPopup from "../components/HospitalRecommendationPopup";
+import { getAppRole } from "@/utils/auth";
 
 type Message = {
   id: string;
@@ -728,8 +729,9 @@ function TopBar() {
   const email = user?.primaryEmailAddress?.emailAddress || "";
   const phone = user?.primaryPhoneNumber?.phoneNumber || null;
   const username = user?.username || null;
-  const role = (user?.unsafeMetadata?.role as string) || null;
+  const role = getAppRole(user);
   const isAdmin = role === "admin";
+  const isClinician = role === "clinician";
   const createdAt = user?.createdAt
     ? new Date(user.createdAt).toLocaleDateString("en-US", {
       year: "numeric",
@@ -756,9 +758,11 @@ function TopBar() {
     <>
       <View style={styles.topBar}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          {isAdmin && (
+          {(isAdmin || isClinician) && (
             <TouchableOpacity
-              onPress={() => router.replace("/admin" as any)}
+              onPress={() =>
+                router.replace((isAdmin ? "/admin" : "/doctor") as any)
+              }
               style={{ marginRight: 4 }}
             >
               <Ionicons name="arrow-back" size={22} color="#444" />

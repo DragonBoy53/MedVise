@@ -5,6 +5,7 @@ const {
   createPredictionEvent,
   getSpecialtyFromToolName,
 } = require("../services/telemetryService");
+const { persistChatInteraction } = require("../services/chatPersistenceService");
 
 const MODEL_NAME = process.env.MODEL_NAME;
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL;
@@ -166,6 +167,18 @@ async function chatController(req, res) {
 
     // Extract final reply text
     const replyText = response.text || "I'm sorry, I couldn't generate a response. Please try again.";
+
+    try {
+      await persistChatInteraction({
+        clerkUserId: req.auth?.clerkUserId || null,
+        userMessage: message || null,
+        assistantMessage: replyText,
+        prediction: lastPrediction,
+        hadImage: Boolean(file),
+      });
+    } catch (persistenceError) {
+      console.error("[chatController] Chat persistence failed:", persistenceError);
+    }
 
     // Cleanup temp image
     if (file) {

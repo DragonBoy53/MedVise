@@ -52,6 +52,8 @@ async function listPatientsForDoctor(doctorClerkUserId) {
       `
         SELECT
           pdl.patient_user_id AS "patientUserId",
+          pdl.patient_email_snapshot AS "patientEmail",
+          pdl.patient_name_snapshot AS "patientName",
           pdl.status,
           pdl.created_at AS "linkedAt",
           COUNT(pe.id)::int AS "predictionCount",
@@ -61,7 +63,7 @@ async function listPatientsForDoctor(doctorClerkUserId) {
           ON pe.clerk_user_id = pdl.patient_user_id
         WHERE pdl.doctor_user_id = $1
           AND pdl.status = 'active'
-        GROUP BY pdl.patient_user_id, pdl.status, pdl.created_at
+        GROUP BY pdl.patient_user_id, pdl.patient_email_snapshot, pdl.patient_name_snapshot, pdl.status, pdl.created_at
         ORDER BY MAX(pe.created_at) DESC NULLS LAST, pdl.created_at DESC
       `,
       [doctorClerkUserId],
@@ -69,7 +71,11 @@ async function listPatientsForDoctor(doctorClerkUserId) {
 
     return result.rows.map((row) => ({
       patientUserId: row.patientUserId,
-      displayName: `Patient ${String(row.patientUserId).slice(-6)}`,
+      displayName:
+        row.patientName ||
+        row.patientEmail ||
+        `Patient ${String(row.patientUserId).slice(-6)}`,
+      email: row.patientEmail || null,
       status: row.status,
       linkedAt: row.linkedAt,
       predictionCount: row.predictionCount,
@@ -77,6 +83,7 @@ async function listPatientsForDoctor(doctorClerkUserId) {
     }));
   } catch (error) {
     if (isSchemaError(error)) {
+      error.originalMessage = error.message;
       error.code = "SCHEMA_NOT_READY";
     }
     throw error;
@@ -95,7 +102,10 @@ async function getPatientSummaryForDoctor({ doctorClerkUserId, patientClerkUserI
     // an active patient_doctor_links row for this exact doctor and patient.
     const linkResult = await pool.query(
       `
-        SELECT id
+        SELECT
+          id,
+          patient_email_snapshot AS "patientEmail",
+          patient_name_snapshot AS "patientName"
         FROM patient_doctor_links
         WHERE doctor_user_id = $1
           AND patient_user_id = $2
@@ -143,15 +153,13 @@ async function getPatientSummaryForDoctor({ doctorClerkUserId, patientClerkUserI
           cs.started_at AS "startedAt",
           cs.last_message_at AS "lastMessageAt"
         FROM chat_sessions cs
-        INNER JOIN users patient
-          ON patient.id = cs.user_id
-        -- Same isolation check for chat summaries: the patient local user row
-        -- must map to a Clerk ID with an active link to the current clinician.
+        -- Same isolation check for chat summaries: the saved session must belong
+        -- to a Clerk user ID that is actively linked to the current clinician.
         INNER JOIN patient_doctor_links pdl
-          ON pdl.patient_user_id = patient.clerk_user_id
+          ON pdl.patient_user_id = cs.clerk_user_id
           AND pdl.doctor_user_id = $1
           AND pdl.status = 'active'
-        WHERE patient.clerk_user_id = $2
+        WHERE cs.clerk_user_id = $2
           AND cs.summary IS NOT NULL
           AND BTRIM(cs.summary) <> ''
         ORDER BY cs.last_message_at DESC
@@ -160,16 +168,44 @@ async function getPatientSummaryForDoctor({ doctorClerkUserId, patientClerkUserI
       [doctorClerkUserId, patientClerkUserId],
     );
 
+    const messagesResult = await pool.query(
+      `
+        SELECT
+          cm.id,
+          cm.chat_session_id AS "chatSessionId",
+          cm.sender_role AS "senderRole",
+          cm.content_redacted AS "content",
+          cm.created_at AS "createdAt"
+        FROM chat_messages cm
+        INNER JOIN chat_sessions cs
+          ON cs.id = cm.chat_session_id
+        INNER JOIN patient_doctor_links pdl
+          ON pdl.patient_user_id = cs.clerk_user_id
+          AND pdl.doctor_user_id = $1
+          AND pdl.status = 'active'
+        WHERE cs.clerk_user_id = $2
+        ORDER BY cm.created_at DESC
+        LIMIT 30
+      `,
+      [doctorClerkUserId, patientClerkUserId],
+    );
+
     return {
       patient: {
         patientUserId: patientClerkUserId,
-        displayName: `Patient ${String(patientClerkUserId).slice(-6)}`,
+        displayName:
+          linkResult.rows[0]?.patientName ||
+          linkResult.rows[0]?.patientEmail ||
+          `Patient ${String(patientClerkUserId).slice(-6)}`,
+        email: linkResult.rows[0]?.patientEmail || null,
       },
       summaries: summariesResult.rows,
       predictions: predictionsResult.rows.map(mapPrediction),
+      messages: messagesResult.rows,
     };
   } catch (error) {
     if (isSchemaError(error)) {
+      error.originalMessage = error.message;
       error.code = "SCHEMA_NOT_READY";
     }
     throw error;
