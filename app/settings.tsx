@@ -6,6 +6,7 @@ import {
   Alert, Animated, Modal, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { getAppRole } from "@/utils/auth";
 
 const TERMS_TEXT = `Terms of Use
 1. Acceptance of Terms
@@ -19,7 +20,7 @@ MedVise is an AI powered informational assistant. It does NOT provide medical di
 - In an emergency, call your local emergency number immediately
 
 4. Data & Privacy
-Your conversations may be processed to provide AI responses. We do not sell your personal data to third parties.
+Your conversations and prediction analyses may be stored to provide AI responses, prediction history, and clinician sharing when you choose to link a doctor. We do not sell your personal data to third parties.
 
 5. Changes to Terms
 We may update these terms at any time. Continued use of the app means you accept the updated terms.`;
@@ -28,15 +29,17 @@ const PRIVACY_TEXT = `Privacy Policy
 1. Information We Collect
 - Account information (name, email) via Clerk authentication
 - Chat messages you send to the AI assistant
+- AI-generated summaries and model prediction results
 - Device location (only when finding nearby doctors, with your permission)
 
 2. How We Use Your Information
 - To provide AI powered medical information
 - To find nearby healthcare providers based on your location
+- To let you share selected MedVise analyses with clinicians you link by email
 - To improve our services
 
 3. Data Storage
-- We do not store your conversations on our servers permanently
+- We store prediction records and saved chat analyses so you can review them later and share them with linked clinicians
 
 4. Third-Party Services
 - Clerk (authentication)
@@ -53,6 +56,16 @@ const FAQ_ITEMS = [
   { q: "What should I do in an emergency?", a: "Do NOT use MedVise in emergencies. Call your local emergency number ." },
 ];
 
+FAQ_ITEMS[3] = {
+  q: "Is my chat history saved?",
+  a: "MedVise stores recent analyses, summaries, and prediction results so you can review them later and share them with linked clinicians.",
+};
+
+FAQ_ITEMS.splice(5, 0, {
+  q: "Can I share my data with a doctor?",
+  a: "Yes. Patients can link a clinician by email from Settings and that clinician can then review shared MedVise analyses in the doctor portal.",
+});
+
 export default function SettingsScreen() {
   const { user } = useUser();
   const { signOut } = useAuth();
@@ -62,6 +75,7 @@ export default function SettingsScreen() {
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
 
   const email = user?.primaryEmailAddress?.emailAddress || "No email found";
+  const role = getAppRole(user);
 
   const handleSignOut = () => {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
@@ -106,6 +120,21 @@ export default function SettingsScreen() {
             </View>
             <Ionicons name="chevron-forward" size={18} color="#ccc" />
           </TouchableOpacity>
+          {role === "user" && (
+            <>
+              <View style={styles.divider} />
+              <TouchableOpacity style={styles.row} onPress={() => router.push("/share-doctor" as any)} activeOpacity={0.7}>
+                <View style={styles.rowLeft}>
+                  <View style={[styles.iconWrap, { backgroundColor: "#f0f0f0" }]}><Ionicons name="share-social-outline" size={18} color="#444" /></View>
+                  <View>
+                    <Text style={styles.rowTitle}>Share With Clinician</Text>
+                    <Text style={styles.rowSubtitle}>Link a doctor by email to share analyses</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#ccc" />
+              </TouchableOpacity>
+            </>
+          )}
           <View style={styles.divider} />
           <TouchableOpacity style={[styles.row, styles.rowLast]} onPress={() => setModalType("dataControls")} activeOpacity={0.7}>
             <View style={styles.rowLeft}>
@@ -151,10 +180,10 @@ export default function SettingsScreen() {
       </ScrollView>
 
       <InfoModal visible={modalType === "dataControls"} onClose={() => setModalType(null)} title="Data safety" icon="shield-checkmark-outline">
-        <Text style={modalStyles.bodyText}>Safety starts with understanding how developers collect and share your data. Data privacy and security practices may vary based on your use, region, and age.</Text>
+        <Text style={modalStyles.bodyText}>Safety starts with understanding how MedVise stores and shares your analysis history. Shared clinician access only happens after you explicitly link a clinician.</Text>
         <View style={modalStyles.safetyList}>
-          <SafetyRow icon="share-social-outline" label="No data shared with third parties" />
-          <SafetyRow icon="cloud-offline-outline" label="No data collected" />
+          <SafetyRow icon="share-social-outline" label="Clinician sharing is opt-in" />
+          <SafetyRow icon="cloud-done-outline" label="Predictions and summaries can be saved" />
           <SafetyRow icon="lock-closed-outline" label="Data is encrypted in transit" />
    
         </View>

@@ -35,7 +35,7 @@ async function linkDoctor(req, res) {
     if (error.code === "CLINICIAN_NOT_FOUND") {
       return res.status(404).json({
         message:
-          "Clinician not found. Confirm the doctor has a users row with role='clinician' and the submitted Clerk user ID.",
+          "Clinician not found. Confirm the submitted email, clinician code, or Clerk user ID belongs to a clinician account.",
       });
     }
 
@@ -51,6 +51,29 @@ async function linkDoctor(req, res) {
   }
 }
 
+async function listLinkedDoctors(req, res) {
+  try {
+    const items = await patientService.listLinkedDoctors(req.auth?.clerkUserId);
+    return res.json({ items });
+  } catch (error) {
+    console.error("[patientController.listLinkedDoctors]", error);
+
+    if (error.code === "SCHEMA_NOT_READY") {
+      return res.status(503).json({
+        message:
+          "Patient sharing tables are not ready yet. Run backend/sql/patient_doctor_links.sql first.",
+      });
+    }
+
+    if (error.code === "UNSUPPORTED_AUTH") {
+      return res.status(400).json({ message: "This account type cannot view shared doctors." });
+    }
+
+    return res.status(500).json({ message: "Failed to load linked doctors." });
+  }
+}
+
 module.exports = {
   linkDoctor,
+  listLinkedDoctors,
 };

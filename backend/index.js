@@ -4,6 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
 const os = require("os");
+const authRoutes = require("./routes/authRoutes");
 const chatController = require("./controllers/chatController");
 const adminRoutes = require("./routes/adminRoutes");
 const doctorRoutes = require("./routes/doctorRoutes");
@@ -49,6 +50,7 @@ app.get("/api/admin/test", requireAuth, requireRole("admin"), async (req, res) =
 });
 
 app.post("/api/chat", upload.single("image"), optionalAuth, chatController);
+app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/doctor", doctorRoutes);
 app.use("/api/patient", patientRoutes);

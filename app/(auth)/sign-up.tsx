@@ -21,7 +21,7 @@ export default function SignupScreen() {
   const [fullName, setFullName] = useState("");
   const [emailAddress, setEmailAddress] = useState("");
   const [password, setPassword] = useState("");
-  //const [role, setRole] = useState<"user" | "admin">("user");
+  const [role, setRole] = useState<"user" | "clinician">("user");
 
   const [pendingVerification, setPendingVerification] = useState(false);
   const [code, setCode] = useState("");
@@ -123,7 +123,7 @@ export default function SignupScreen() {
         password,
         firstName,
         lastName,
-        unsafeMetadata: { role: "user"},
+        unsafeMetadata: { role, onboardingComplete: false },
       });
 
       await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
@@ -159,7 +159,7 @@ export default function SignupScreen() {
       if (signUpAttempt.status === "complete") {
         await setActive({ session: signUpAttempt.createdSessionId });
         setLoading(false);
-        router.replace("/");
+        router.replace(`/onboarding?role=${role}`);
       } else {
         setLoading(false);
         console.error(JSON.stringify(signUpAttempt, null, 2));
@@ -236,6 +236,33 @@ export default function SignupScreen() {
                   value={password}
                   onChangeText={setPassword}
                 />
+
+                <Text style={styles.roleLabel}>I am signing up as</Text>
+                <View style={styles.roleRow}>
+                  <TouchableOpacity
+                    style={[styles.roleOption, role === "user" && styles.roleSelected]}
+                    activeOpacity={0.85}
+                    onPress={() => setRole("user")}
+                  >
+                    <Text style={[styles.roleText, role === "user" && styles.roleTextSelected]}>
+                      Patient
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.roleOption, role === "clinician" && styles.roleSelected]}
+                    activeOpacity={0.85}
+                    onPress={() => setRole("clinician")}
+                  >
+                    <Text
+                      style={[
+                        styles.roleText,
+                        role === "clinician" && styles.roleTextSelected,
+                      ]}
+                    >
+                      Doctor
+                    </Text>
+                  </TouchableOpacity>
+                </View>
                 
                 <TouchableOpacity
                   style={styles.signupBtn}

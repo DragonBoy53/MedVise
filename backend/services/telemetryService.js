@@ -260,6 +260,7 @@ async function createPredictionEvent({
   toolResult,
   latencyMs,
   clerkUserId = null,
+  chatSessionId = null,
 }) {
   const modelVersion = await ensureModelVersion(specialty);
 
@@ -267,6 +268,7 @@ async function createPredictionEvent({
     `
       INSERT INTO prediction_events (
         model_version_id,
+        chat_session_id,
         clerk_user_id,
         specialty,
         predicted_label,
@@ -276,11 +278,12 @@ async function createPredictionEvent({
         response_payload_json,
         latency_ms
       )
-      VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10)
       RETURNING id, specialty, predicted_label, predicted_value, created_at
     `,
     [
       modelVersion?.id || null,
+      chatSessionId,
       clerkUserId,
       specialty,
       toolResult?.label || "Unknown",
@@ -301,8 +304,27 @@ async function createPredictionEvent({
   return result.rows[0];
 }
 
+async function attachPredictionEventToChatSession(predictionEventId, chatSessionId) {
+  if (!predictionEventId || !chatSessionId) {
+    return null;
+  }
+
+  const result = await pool.query(
+    `
+      UPDATE prediction_events
+      SET chat_session_id = $2
+      WHERE id = $1
+      RETURNING id, chat_session_id AS "chatSessionId"
+    `,
+    [predictionEventId, chatSessionId],
+  );
+
+  return result.rows[0] || null;
+}
+
 module.exports = {
   ensureModelVersion,
   getSpecialtyFromToolName,
   createPredictionEvent,
+  attachPredictionEventToChatSession,
 };

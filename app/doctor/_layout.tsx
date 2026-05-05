@@ -2,12 +2,14 @@ import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Stack, useRouter } from "expo-router";
 import { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
+import { getAppRole, isOnboardingComplete } from "@/utils/auth";
 
 export default function DoctorLayout() {
   const { isSignedIn, isLoaded } = useAuth();
   const { user, isLoaded: isUserLoaded } = useUser();
   const router = useRouter();
-  const role = user?.publicMetadata?.role as string | undefined;
+  const role = getAppRole(user);
+  const onboardingComplete = isOnboardingComplete(user);
 
   useEffect(() => {
     if (!isLoaded || !isUserLoaded) {
@@ -19,12 +21,23 @@ export default function DoctorLayout() {
       return;
     }
 
+    if (!onboardingComplete) {
+      router.replace("/onboarding");
+      return;
+    }
+
     if (role !== "clinician") {
       router.replace("/chat");
     }
-  }, [isSignedIn, isLoaded, isUserLoaded, role, router]);
+  }, [isSignedIn, isLoaded, isUserLoaded, onboardingComplete, role, router]);
 
-  if (!isLoaded || !isUserLoaded || !isSignedIn || role !== "clinician") {
+  if (
+    !isLoaded ||
+    !isUserLoaded ||
+    !isSignedIn ||
+    !onboardingComplete ||
+    role !== "clinician"
+  ) {
     return (
       <View
         style={{

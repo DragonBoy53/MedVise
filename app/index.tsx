@@ -1,6 +1,7 @@
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Redirect } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
+import { getAppRole, isOnboardingComplete } from "@/utils/auth";
 
 export default function Index() {
   const { isSignedIn, isLoaded } = useAuth();
@@ -15,7 +16,13 @@ export default function Index() {
   }
 
   if (isSignedIn) {
-    const role = user?.publicMetadata?.role as string;
+    const role = getAppRole(user);
+    const onboardingComplete = isOnboardingComplete(user);
+
+    if (!role || !onboardingComplete) {
+      return <Redirect href={"/onboarding" as any} />;
+    }
+
     if (role === "admin") {
       return <Redirect href={"/admin" as any} />;
     }

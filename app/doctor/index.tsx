@@ -15,10 +15,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import apiClient from "../../api/client";
+import { getClinicianCode } from "@/utils/auth";
 
 type Patient = {
   patientUserId: string;
   displayName: string;
+  email?: string | null;
   status: string;
   linkedAt: string;
   predictionCount: number;
@@ -47,9 +49,17 @@ type PatientDetail = {
   patient: {
     patientUserId: string;
     displayName: string;
+    email?: string | null;
   };
   summaries: PatientSummary[];
   predictions: PatientPrediction[];
+  messages: {
+    id: number;
+    chatSessionId: string;
+    senderRole: string;
+    content: string | null;
+    createdAt: string;
+  }[];
 };
 
 function formatDate(value?: string | null) {
@@ -97,6 +107,8 @@ export default function DoctorDashboard() {
     user?.fullName ||
     user?.primaryEmailAddress?.emailAddress ||
     "Clinician";
+  const clinicianEmail = user?.primaryEmailAddress?.emailAddress || "";
+  const clinicianCode = getClinicianCode(user);
 
   const getAuthHeaders = useCallback(async () => {
     const token = await getToken();
@@ -206,17 +218,27 @@ export default function DoctorDashboard() {
           <RefreshControl refreshing={refreshing} onRefresh={refreshPatients} />
         }
         ListHeaderComponent={
-          <View style={styles.summaryStrip}>
-            <View>
-              <Text style={styles.summaryValue}>{patients.length}</Text>
-              <Text style={styles.summaryLabel}>Shared patients</Text>
+          <View style={styles.headerStack}>
+            <View style={styles.summaryStrip}>
+              <View>
+                <Text style={styles.summaryValue}>{patients.length}</Text>
+                <Text style={styles.summaryLabel}>Shared patients</Text>
+              </View>
+              <View style={styles.summaryDivider} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.summaryTitle}>Secure clinical review</Text>
+                <Text style={styles.summaryCopy}>
+                  Only active patient sharing links are returned by the API.
+                </Text>
+              </View>
             </View>
-            <View style={styles.summaryDivider} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.summaryTitle}>Secure clinical review</Text>
-              <Text style={styles.summaryCopy}>
-                Only active patient sharing links are returned by the API.
-              </Text>
+
+            <View style={styles.identityCard}>
+              <Text style={styles.identityTitle}>Share this with patients</Text>
+              <Text style={styles.identityValue}>{clinicianEmail || "No email found"}</Text>
+              {clinicianCode ? (
+                <Text style={styles.identityMeta}>Clinician code: {clinicianCode}</Text>
+              ) : null}
             </View>
           </View>
         }
@@ -301,6 +323,27 @@ export default function DoctorDashboard() {
                 </Text>
               )}
 
+              <Text style={styles.sectionTitle}>Recent MedVise Messages</Text>
+              {patientDetail?.messages?.length ? (
+                patientDetail.messages.map((item) => (
+                  <View key={item.id} style={styles.messageCard}>
+                    <View style={styles.messageHeader}>
+                      <Text style={styles.messageSender}>
+                        {item.senderRole === "assistant" ? "MedVise" : "Patient"}
+                      </Text>
+                      <Text style={styles.panelDate}>{formatDate(item.createdAt)}</Text>
+                    </View>
+                    <Text style={styles.messageBody}>
+                      {item.content || "No message body was saved for this turn."}
+                    </Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.placeholderText}>
+                  No saved chat messages are available for this patient yet.
+                </Text>
+              )}
+
               <Text style={styles.sectionTitle}>ML Risk Scores</Text>
               {patientDetail?.predictions?.length ? (
                 patientDetail.predictions.map((item) => (
@@ -375,6 +418,7 @@ const styles = StyleSheet.create({
   },
   headerBadgeText: { color: "#0F766E", fontSize: 12, fontWeight: "700" },
   listContent: { padding: 20, paddingTop: 4, gap: 12 },
+  headerStack: { gap: 12, marginBottom: 4 },
   summaryStrip: {
     backgroundColor: "#fff",
     borderWidth: 1,
@@ -391,6 +435,16 @@ const styles = StyleSheet.create({
   summaryDivider: { width: 1, height: 44, backgroundColor: "#E2E8F0" },
   summaryTitle: { color: "#0F172A", fontSize: 15, fontWeight: "800" },
   summaryCopy: { color: "#64748B", fontSize: 12, lineHeight: 17, marginTop: 2 },
+  identityCard: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 16,
+    padding: 16,
+  },
+  identityTitle: { color: "#64748B", fontSize: 12, fontWeight: "700", textTransform: "uppercase" },
+  identityValue: { color: "#0F172A", fontSize: 16, fontWeight: "800", marginTop: 6 },
+  identityMeta: { color: "#475569", fontSize: 12, marginTop: 4 },
   patientCard: {
     backgroundColor: "#fff",
     borderWidth: 1,
@@ -479,6 +533,22 @@ const styles = StyleSheet.create({
   },
   panelTitle: { color: "#0F172A", fontSize: 15, fontWeight: "800" },
   panelDate: { color: "#64748B", fontSize: 12 },
+  messageCard: {
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 14,
+    padding: 14,
+    backgroundColor: "#fff",
+    gap: 8,
+  },
+  messageHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  messageSender: { color: "#0F172A", fontSize: 13, fontWeight: "800" },
+  messageBody: { color: "#334155", fontSize: 14, lineHeight: 20 },
   bulletRow: { flexDirection: "row", alignItems: "flex-start", gap: 9 },
   bulletDot: {
     width: 6,
