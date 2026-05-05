@@ -63,7 +63,7 @@ async function listPatientsForDoctor(doctorClerkUserId) {
           ON pe.clerk_user_id = pdl.patient_user_id
         WHERE pdl.doctor_user_id = $1
           AND pdl.status = 'active'
-        GROUP BY pdl.patient_user_id, pdl.status, pdl.created_at
+        GROUP BY pdl.patient_user_id, pdl.patient_email_snapshot, pdl.patient_name_snapshot, pdl.status, pdl.created_at
         ORDER BY MAX(pe.created_at) DESC NULLS LAST, pdl.created_at DESC
       `,
       [doctorClerkUserId],
@@ -83,6 +83,7 @@ async function listPatientsForDoctor(doctorClerkUserId) {
     }));
   } catch (error) {
     if (isSchemaError(error)) {
+      error.originalMessage = error.message;
       error.code = "SCHEMA_NOT_READY";
     }
     throw error;
@@ -204,6 +205,7 @@ async function getPatientSummaryForDoctor({ doctorClerkUserId, patientClerkUserI
     };
   } catch (error) {
     if (isSchemaError(error)) {
+      error.originalMessage = error.message;
       error.code = "SCHEMA_NOT_READY";
     }
     throw error;

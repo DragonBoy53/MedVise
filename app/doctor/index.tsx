@@ -1,8 +1,10 @@
+import { getClinicianCode } from "@/utils/auth";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   RefreshControl,
@@ -15,7 +17,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import apiClient from "../../api/client";
-import { getClinicianCode } from "@/utils/auth";
 
 type Patient = {
   patientUserId: string;
@@ -92,23 +93,39 @@ function riskColor(riskLevel: string) {
 }
 
 export default function DoctorDashboard() {
-  const { getToken } = useAuth();
+  const { getToken, signOut } = useAuth();
   const { user } = useUser();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loadingPatients, setLoadingPatients] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [patientsError, setPatientsError] = useState<string | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const [patientDetail, setPatientDetail] = useState<PatientDetail | null>(null);
+  const [patientDetail, setPatientDetail] = useState<PatientDetail | null>(
+    null,
+  );
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
   const clinicianName =
-    user?.fullName ||
-    user?.primaryEmailAddress?.emailAddress ||
-    "Clinician";
+    user?.fullName || user?.primaryEmailAddress?.emailAddress || "Clinician";
   const clinicianEmail = user?.primaryEmailAddress?.emailAddress || "";
   const clinicianCode = getClinicianCode(user);
+
+  const handleSignOut = () => {
+    Alert.alert(
+      "Sign Out",
+      "Are you sure you want to sign out of the Clinician Portal?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Sign Out",
+          style: "destructive",
+          onPress: () => signOut(),
+        },
+      ],
+      { cancelable: true },
+    );
+  };
 
   const getAuthHeaders = useCallback(async () => {
     const token = await getToken();
@@ -135,7 +152,7 @@ export default function DoctorDashboard() {
 
   useEffect(() => {
     loadPatients();
-  }, [loadPatients]);
+  }, []);
 
   const refreshPatients = () => {
     setRefreshing(true);
@@ -184,7 +201,8 @@ export default function DoctorDashboard() {
       <View style={styles.patientBody}>
         <Text style={styles.patientName}>{item.displayName}</Text>
         <Text style={styles.patientMeta} numberOfLines={1}>
-          Linked {formatDate(item.linkedAt)} • {item.predictionCount} risk scores
+          Linked {formatDate(item.linkedAt)} • {item.predictionCount} risk
+          scores
         </Text>
         <Text style={styles.patientSubtle}>
           Last activity: {formatDate(item.lastPredictionAt)}
@@ -203,9 +221,18 @@ export default function DoctorDashboard() {
           <Text style={styles.eyebrow}>Clinician Portal</Text>
           <Text style={styles.title}>Patient Review</Text>
         </View>
-        <View style={styles.headerBadge}>
-          <Ionicons name="shield-checkmark-outline" size={16} color="#0F766E" />
-          <Text style={styles.headerBadgeText}>{clinicianName}</Text>
+        <View style={styles.headerRight}>
+          <View style={styles.headerBadge}>
+            <Ionicons name="shield-checkmark-outline" size={16} color="#0F766E" />
+            <Text style={styles.headerBadgeText}>{clinicianName}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.signOutButton}
+            onPress={handleSignOut}
+            accessibilityLabel="Sign out"
+          >
+            <Ionicons name="log-out-outline" size={20} color="#C62828" />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -235,9 +262,13 @@ export default function DoctorDashboard() {
 
             <View style={styles.identityCard}>
               <Text style={styles.identityTitle}>Share this with patients</Text>
-              <Text style={styles.identityValue}>{clinicianEmail || "No email found"}</Text>
+              <Text style={styles.identityValue}>
+                {clinicianEmail || "No email found"}
+              </Text>
               {clinicianCode ? (
-                <Text style={styles.identityMeta}>Clinician code: {clinicianCode}</Text>
+                <Text style={styles.identityMeta}>
+                  Clinician code: {clinicianCode}
+                </Text>
               ) : null}
             </View>
           </View>
@@ -252,7 +283,9 @@ export default function DoctorDashboard() {
             <View style={styles.emptyState}>
               <Ionicons name="people-outline" size={32} color="#94A3B8" />
               <Text style={styles.emptyTitle}>
-                {patientsError ? "Could not load patients" : "No shared patients"}
+                {patientsError
+                  ? "Could not load patients"
+                  : "No shared patients"}
               </Text>
               <Text style={styles.emptyText}>
                 {patientsError ||
@@ -310,7 +343,10 @@ export default function DoctorDashboard() {
                       </Text>
                     </View>
                     {splitSummary(item.summary).map((line, index) => (
-                      <View key={`${item.id}-${index}`} style={styles.bulletRow}>
+                      <View
+                        key={`${item.id}-${index}`}
+                        style={styles.bulletRow}
+                      >
                         <View style={styles.bulletDot} />
                         <Text style={styles.bulletText}>{line}</Text>
                       </View>
@@ -329,12 +365,17 @@ export default function DoctorDashboard() {
                   <View key={item.id} style={styles.messageCard}>
                     <View style={styles.messageHeader}>
                       <Text style={styles.messageSender}>
-                        {item.senderRole === "assistant" ? "MedVise" : "Patient"}
+                        {item.senderRole === "assistant"
+                          ? "MedVise"
+                          : "Patient"}
                       </Text>
-                      <Text style={styles.panelDate}>{formatDate(item.createdAt)}</Text>
+                      <Text style={styles.panelDate}>
+                        {formatDate(item.createdAt)}
+                      </Text>
                     </View>
                     <Text style={styles.messageBody}>
-                      {item.content || "No message body was saved for this turn."}
+                      {item.content ||
+                        "No message body was saved for this turn."}
                     </Text>
                   </View>
                 ))
@@ -352,7 +393,9 @@ export default function DoctorDashboard() {
                       <Text style={styles.riskTitle}>
                         {formatSpecialty(item.specialty)}
                       </Text>
-                      <Text style={styles.riskDate}>{formatDate(item.createdAt)}</Text>
+                      <Text style={styles.riskDate}>
+                        {formatDate(item.createdAt)}
+                      </Text>
                     </View>
                     <View
                       style={[
@@ -395,6 +438,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 14,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  signOutButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
   },
   eyebrow: {
     color: "#0F766E",
@@ -442,8 +500,18 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
   },
-  identityTitle: { color: "#64748B", fontSize: 12, fontWeight: "700", textTransform: "uppercase" },
-  identityValue: { color: "#0F172A", fontSize: 16, fontWeight: "800", marginTop: 6 },
+  identityTitle: {
+    color: "#64748B",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  identityValue: {
+    color: "#0F172A",
+    fontSize: 16,
+    fontWeight: "800",
+    marginTop: 6,
+  },
   identityMeta: { color: "#475569", fontSize: 12, marginTop: 4 },
   patientCard: {
     backgroundColor: "#fff",

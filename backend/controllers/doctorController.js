@@ -9,8 +9,7 @@ async function listPatients(req, res) {
 
     if (error.code === "SCHEMA_NOT_READY") {
       return res.status(503).json({
-        message:
-          "Patient sharing tables are not ready yet. Run backend/sql/patient_doctor_links.sql first.",
+        message: `Schema not ready — ${error.originalMessage || error.message}. Ensure both admin_portal_schema.sql and patient_doctor_links.sql have been applied to your NeonDB database.`,
       });
     }
 
@@ -35,8 +34,7 @@ async function getPatientSummary(req, res) {
 
     if (error.code === "SCHEMA_NOT_READY") {
       return res.status(503).json({
-        message:
-          "Patient sharing tables are not ready yet. Run backend/sql/patient_doctor_links.sql first.",
+        message: `Schema not ready — ${error.originalMessage || error.message}. Ensure both admin_portal_schema.sql and patient_doctor_links.sql have been applied to your NeonDB database.`,
       });
     }
 
