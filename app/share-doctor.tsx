@@ -1,6 +1,6 @@
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -37,10 +37,15 @@ export default function ShareDoctorScreen() {
   const [linkedDoctors, setLinkedDoctors] = useState<LinkedDoctor[]>([]);
   const role = getAppRole(user);
 
+  // Keep a stable ref to getToken so callbacks don't change identity on
+  // every render (getToken from useAuth() is not referentially stable).
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+
   const getHeaders = useCallback(async () => {
-    const token = await getToken();
+    const token = await getTokenRef.current();
     return token ? { Authorization: `Bearer ${token}` } : {};
-  }, [getToken]);
+  }, []);
 
   const loadLinkedDoctors = useCallback(async () => {
     try {

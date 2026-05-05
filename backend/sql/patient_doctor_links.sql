@@ -34,6 +34,14 @@ CREATE TABLE IF NOT EXISTS patient_doctor_links (
     UNIQUE (patient_user_id, doctor_user_id)
 );
 
+-- Backfill columns that may be missing from tables created before snapshot
+-- columns were added to the CREATE TABLE definition above.
+ALTER TABLE patient_doctor_links
+  ADD COLUMN IF NOT EXISTS patient_email_snapshot TEXT,
+  ADD COLUMN IF NOT EXISTS patient_name_snapshot  TEXT,
+  ADD COLUMN IF NOT EXISTS doctor_email_snapshot   TEXT,
+  ADD COLUMN IF NOT EXISTS doctor_name_snapshot    TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_patient_doctor_links_patient_status
   ON patient_doctor_links(patient_user_id, status);
 

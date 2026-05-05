@@ -40,4 +40,48 @@ SELECT
     WHERE table_schema = 'public'
       AND table_name   = 'users'
       AND column_name  = 'clinician_code'
+  )
+
+UNION ALL
+
+SELECT
+  'patient_doctor_links.patient_email_snapshot column',
+  EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name   = 'patient_doctor_links'
+      AND column_name  = 'patient_email_snapshot'
+  )
+
+UNION ALL
+
+SELECT
+  'patient_doctor_links.patient_name_snapshot column',
+  EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name   = 'patient_doctor_links'
+      AND column_name  = 'patient_name_snapshot'
+  )
+
+UNION ALL
+
+SELECT
+  'patient_doctor_links.doctor_email_snapshot column',
+  EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name   = 'patient_doctor_links'
+      AND column_name  = 'doctor_email_snapshot'
+  )
+
+UNION ALL
+
+SELECT
+  'patient_doctor_links.doctor_name_snapshot column',
+  EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name   = 'patient_doctor_links'
+      AND column_name  = 'doctor_name_snapshot'
   );

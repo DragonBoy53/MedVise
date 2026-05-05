@@ -94,10 +94,11 @@ async function findClinicianByIdentifier(identifier) {
   let clerkUsers = [];
 
   if (normalized.includes("@")) {
-    clerkUsers = await clerkClient.users.getUserList({
+    const result = await clerkClient.users.getUserList({
       emailAddress: [normalized],
       limit: 10,
     });
+    clerkUsers = Array.isArray(result) ? result : result?.data || [];
   } else if (normalized.startsWith("user_")) {
     try {
       const user = await clerkClient.users.getUser(normalized);
@@ -106,9 +107,10 @@ async function findClinicianByIdentifier(identifier) {
       clerkUsers = [];
     }
   } else {
-    clerkUsers = await clerkClient.users.getUserList({
+    const result = await clerkClient.users.getUserList({
       limit: 500,
     });
+    clerkUsers = Array.isArray(result) ? result : result?.data || [];
   }
 
   const clinician = clerkUsers.find((user) => {
