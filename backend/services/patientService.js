@@ -90,11 +90,15 @@ async function linkDoctorToPatient({ patientClerkUserId, doctorIdentifier }) {
       link: result.rows[0],
       doctor: {
         clerkUserId: doctor.clerkUserId,
-        displayName: doctor.clerkUserId,
+        displayName: doctor.displayName,
       },
     };
   } catch (error) {
+    // Only reclassify genuine schema errors (missing table/column).
+    // Other coded errors (CLINICIAN_NOT_FOUND, SELF_LINK_NOT_ALLOWED, etc.)
+    // must propagate with their original code intact.
     if (isSchemaError(error)) {
+      error.originalMessage = error.message;
       error.code = "SCHEMA_NOT_READY";
     }
     throw error;
@@ -129,6 +133,7 @@ async function listLinkedDoctors(patientClerkUserId) {
     return result.rows;
   } catch (error) {
     if (isSchemaError(error)) {
+      error.originalMessage = error.message;
       error.code = "SCHEMA_NOT_READY";
     }
     throw error;
