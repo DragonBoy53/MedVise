@@ -18,6 +18,7 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="admin" options={{ headerShown: false }} />
+          <Stack.Screen name="doctor" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: "modal" }} />
         </Stack>
         <StatusBar style="auto" />

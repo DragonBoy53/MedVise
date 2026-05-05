@@ -40,15 +40,17 @@ async function tryClerkToken(token) {
       return null;
     }
 
-    // Prefer custom Clerk session claims so RBAC stays stateless.
-    const role =
+    // Prefer custom Clerk session claims so RBAC stays stateless, but fall back
+    // to Clerk user public metadata when the session token does not include role.
+    const tokenRole =
       verifiedToken.role ||
       verifiedToken?.publicMetadata?.role ||
       verifiedToken?.metadata?.role ||
-      "user";
+      null;
 
     let clerkUser = null;
     const needsUserLookup =
+      !tokenRole ||
       !verifiedToken.email &&
       !verifiedToken.name &&
       !verifiedToken.firstName &&
@@ -58,6 +60,12 @@ async function tryClerkToken(token) {
       const clerkClient = getClerkClient();
       clerkUser = clerkClient ? await clerkClient.users.getUser(clerkUserId) : null;
     }
+
+    const role =
+      tokenRole ||
+      clerkUser?.publicMetadata?.role ||
+      clerkUser?.unsafeMetadata?.role ||
+      "user";
 
     return {
       id: null,

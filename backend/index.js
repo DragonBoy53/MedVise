@@ -6,6 +6,8 @@ const multer = require("multer");
 const os = require("os");
 const chatController = require("./controllers/chatController");
 const adminRoutes = require("./routes/adminRoutes");
+const doctorRoutes = require("./routes/doctorRoutes");
+const patientRoutes = require("./routes/patientRoutes");
 const predictionRoutes = require("./routes/predictionRoutes");
 const recommendationRoutes = require("./routes/recommendationRoutes");
 const { optionalAuth, requireAuth, requireRole } = require("./middleware/auth");
@@ -48,6 +50,8 @@ app.get("/api/admin/test", requireAuth, requireRole("admin"), async (req, res) =
 
 app.post("/api/chat", upload.single("image"), optionalAuth, chatController);
 app.use("/api/admin", adminRoutes);
+app.use("/api/doctor", doctorRoutes);
+app.use("/api/patient", patientRoutes);
 app.use("/api/predictions", predictionRoutes);
 app.use("/api/recommendations", recommendationRoutes);
 
