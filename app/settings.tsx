@@ -58,7 +58,7 @@ const FAQ_ITEMS = [
 
 FAQ_ITEMS[3] = {
   q: "Is my chat history saved?",
-  a: "MedVise stores recent analyses, summaries, and prediction results so you can review them later and share them with linked clinicians.",
+  a: "MedVise stores your chat messages, analyses, summaries, and prediction results so you can review them later from Settings -> History.",
 };
 
 FAQ_ITEMS.splice(5, 0, {
@@ -109,6 +109,17 @@ export default function SettingsScreen() {
               <View><Text style={styles.rowTitle}>Email</Text><Text style={styles.rowSubtitle} numberOfLines={1}>{email}</Text></View>
             </View>
           </View>
+          <View style={styles.divider} />
+          <TouchableOpacity style={styles.row} onPress={() => router.push("/history" as any)} activeOpacity={0.7}>
+            <View style={styles.rowLeft}>
+              <View style={[styles.iconWrap, { backgroundColor: "#f0f0f0" }]}><Ionicons name="time-outline" size={18} color="#444" /></View>
+              <View>
+                <Text style={styles.rowTitle}>History</Text>
+                <Text style={styles.rowSubtitle}>View your saved chats by date and time</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#ccc" />
+          </TouchableOpacity>
           <View style={styles.divider} />
           <TouchableOpacity style={styles.row} onPress={() => router.push("/predictions")} activeOpacity={0.7}>
             <View style={styles.rowLeft}>
@@ -183,7 +194,7 @@ export default function SettingsScreen() {
         <Text style={modalStyles.bodyText}>Safety starts with understanding how MedVise stores and shares your analysis history. Shared clinician access only happens after you explicitly link a clinician.</Text>
         <View style={modalStyles.safetyList}>
           <SafetyRow icon="share-social-outline" label="Clinician sharing is opt-in" />
-          <SafetyRow icon="cloud-done-outline" label="Predictions and summaries can be saved" />
+          <SafetyRow icon="cloud-done-outline" label="Chats, predictions, and summaries can be saved" />
           <SafetyRow icon="lock-closed-outline" label="Data is encrypted in transit" />
    
         </View>

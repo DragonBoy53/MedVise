@@ -49,6 +49,8 @@ app.get("/api/admin/test", requireAuth, requireRole("admin"), async (req, res) =
   }
 });
 
+app.get("/api/chat/history", requireAuth, chatController.listChatHistory);
+app.get("/api/chat/history/:id", requireAuth, chatController.getChatHistorySession);
 app.post("/api/chat", upload.single("image"), optionalAuth, chatController);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);

@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS recovery_jobs (
 CREATE TABLE IF NOT EXISTS chat_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  clerk_user_id TEXT,
   channel TEXT NOT NULL DEFAULT 'mobile-app',
   specialty TEXT,
   status TEXT NOT NULL DEFAULT 'completed',
@@ -213,6 +214,9 @@ ALTER TABLE chat_reviews
 ALTER TABLE retraining_feedback_queue
   ADD COLUMN IF NOT EXISTS submitted_by_clerk_user_id TEXT;
 
+ALTER TABLE chat_sessions
+  ADD COLUMN IF NOT EXISTS clerk_user_id TEXT;
+
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -277,6 +281,9 @@ CREATE INDEX IF NOT EXISTS idx_recovery_jobs_initiated_by_clerk_created_at
 
 CREATE INDEX IF NOT EXISTS idx_chat_sessions_started_at
   ON chat_sessions(started_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_clerk_user_last_message
+  ON chat_sessions(clerk_user_id, last_message_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_chat_messages_session_created_at
   ON chat_messages(chat_session_id, created_at DESC);

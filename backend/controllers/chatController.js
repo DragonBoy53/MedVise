@@ -5,7 +5,11 @@ const {
   createPredictionEvent,
   getSpecialtyFromToolName,
 } = require("../services/telemetryService");
-const { persistChatInteraction } = require("../services/chatPersistenceService");
+const {
+  getChatSessionForUser,
+  listChatSessionsForUser,
+  persistChatInteraction,
+} = require("../services/chatPersistenceService");
 
 const MODEL_NAME = process.env.MODEL_NAME;
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL;
@@ -68,6 +72,7 @@ async function chatController(req, res) {
 
   try {
     const message = req.body.message || "";
+    const chatSessionId = req.body.chatSessionId || null;
     const promptText = message || (file ? "Please analyze this medical image." : "Hello");
     const history = parseHistory(req.body.history);
 
@@ -169,13 +174,15 @@ async function chatController(req, res) {
     const replyText = response.text || "I'm sorry, I couldn't generate a response. Please try again.";
 
     try {
-      await persistChatInteraction({
+      const savedChat = await persistChatInteraction({
         clerkUserId: req.auth?.clerkUserId || null,
+        chatSessionId,
         userMessage: message || null,
         assistantMessage: replyText,
         prediction: lastPrediction,
         hadImage: Boolean(file),
       });
+      res.locals.chatSessionId = savedChat.chatSessionId;
     } catch (persistenceError) {
       console.error("[chatController] Chat persistence failed:", persistenceError);
     }
@@ -189,6 +196,7 @@ async function chatController(req, res) {
     res.json({
       reply: replyText,
       prediction: lastPrediction, // null if no ML tool was called this turn
+      chatSessionId: res.locals.chatSessionId || chatSessionId || null,
     });
 
   } catch (error) {
@@ -205,4 +213,55 @@ async function chatController(req, res) {
   }
 }
 
+async function listChatHistory(req, res) {
+  try {
+    const items = await listChatSessionsForUser(req.auth?.clerkUserId, req.query?.limit);
+    return res.json({ items });
+  } catch (error) {
+    console.error("[chatController.listChatHistory]", error);
+
+    if (error.code === "SCHEMA_NOT_READY") {
+      return res.status(503).json({
+        message: `Schema not ready - ${error.originalMessage || error.message}. Apply the chat history SQL migration to NeonDB.`,
+      });
+    }
+
+    if (error.code === "UNSUPPORTED_AUTH") {
+      return res.status(400).json({ message: "This account cannot view chat history." });
+    }
+
+    return res.status(500).json({ message: "Failed to load chat history." });
+  }
+}
+
+async function getChatHistorySession(req, res) {
+  try {
+    const item = await getChatSessionForUser({
+      clerkUserId: req.auth?.clerkUserId,
+      chatSessionId: req.params.id,
+    });
+    return res.json({ item });
+  } catch (error) {
+    console.error("[chatController.getChatHistorySession]", error);
+
+    if (error.code === "CHAT_SESSION_NOT_FOUND") {
+      return res.status(404).json({ message: "Chat session not found." });
+    }
+
+    if (error.code === "SCHEMA_NOT_READY") {
+      return res.status(503).json({
+        message: `Schema not ready - ${error.originalMessage || error.message}. Apply the chat history SQL migration to NeonDB.`,
+      });
+    }
+
+    if (error.code === "UNSUPPORTED_AUTH") {
+      return res.status(400).json({ message: "This account cannot view chat history." });
+    }
+
+    return res.status(500).json({ message: "Failed to load this chat." });
+  }
+}
+
 module.exports = chatController;
+module.exports.listChatHistory = listChatHistory;
+module.exports.getChatHistorySession = getChatHistorySession;

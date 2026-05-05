@@ -138,6 +138,7 @@ export default function ChatScreen() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [chatSessionId, setChatSessionId] = useState<string | null>(null);
 
   // Hospital recommendation state
   const [unhealthyPrediction, setUnhealthyPrediction] = useState<any>(null);
@@ -241,6 +242,9 @@ export default function ChatScreen() {
       }
 
       formData.append("history", JSON.stringify(history));
+      if (chatSessionId) {
+        formData.append("chatSessionId", chatSessionId);
+      }
 
       if (currentImage) {
         const filename = currentImage.split("/").pop();
@@ -265,6 +269,9 @@ export default function ChatScreen() {
         prediction: response.data.prediction,
       };
       setMessages((m) => [botMsg, ...m]);
+      if (response.data.chatSessionId) {
+        setChatSessionId(response.data.chatSessionId);
+      }
 
       const prediction = response.data.prediction;
       console.log(response.data);
