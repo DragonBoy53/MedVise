@@ -1,6 +1,5 @@
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -200,7 +199,7 @@ export default function BackupScreen() {
     [getAuthHeaders],
   );
 
-  useFocusEffect(
+  useEffect(
     useCallback(() => {
       loadBackups();
     }, [loadBackups]),
@@ -459,7 +458,8 @@ export default function BackupScreen() {
           </View>
         ) : null}
 
-        {!item.errorMessage && String(item.status).toLowerCase() === "queued" ? (
+        {!item.errorMessage &&
+        String(item.status).toLowerCase() === "queued" ? (
           <View style={styles.infoBox}>
             <Ionicons name="hourglass-outline" size={15} color="#B45309" />
             <Text style={styles.infoText}>
@@ -468,7 +468,8 @@ export default function BackupScreen() {
           </View>
         ) : null}
 
-        {!item.errorMessage && String(item.status).toLowerCase() === "processing" ? (
+        {!item.errorMessage &&
+        String(item.status).toLowerCase() === "processing" ? (
           <View style={styles.infoBox}>
             <Ionicons name="sync-outline" size={15} color="#2563EB" />
             <Text style={styles.infoText}>

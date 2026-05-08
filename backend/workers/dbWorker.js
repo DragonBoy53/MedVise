@@ -363,6 +363,8 @@ async function runWorkerLoop() {
   requireEnv("DATABASE_URL");
   requireEnv("SUPABASE_URL");
   requireEnv("SUPABASE_SERVICE_ROLE_KEY");
+  await assertPostgresTool(PG_DUMP_BIN, "PG_DUMP_BIN");
+  await assertPostgresTool(PG_RESTORE_BIN, "PG_RESTORE_BIN");
 
   console.log("[dbWorker] Started. Polling Neon for queued backup/recovery jobs.");
 
@@ -374,6 +376,19 @@ async function runWorkerLoop() {
       console.error("[dbWorker] Worker loop failed:", error);
       await delay(POLL_INTERVAL_MS);
     }
+  }
+}
+
+async function assertPostgresTool(binary, envKey) {
+  try {
+    await execAsync(`${shellQuote(binary)} --version`, {
+      env: process.env,
+      timeout: 1000 * 10,
+    });
+  } catch (error) {
+    throw new Error(
+      `${envKey} (${binary}) is not available. Install PostgreSQL client tools or set ${envKey} to the full binary path.`,
+    );
   }
 }
 
