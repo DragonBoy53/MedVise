@@ -4,7 +4,7 @@ const {
   calculateConfusionMatrix,
   calculateAUC,
 } = require("../utils/metricsCalculator");
-const { enqueueDbTask } = require("../queues/dbTasksQueue");
+const { enqueueDbTask, getDbQueueStatus } = require("../queues/dbTasksQueue");
 const VALID_SPECIALTIES = ["cardiology", "diabetes", "thyroid"];
 const BACKUP_API_ENV_KEYS = [
   "DATABASE_URL",
@@ -22,14 +22,30 @@ function getMissingEnv(keys) {
   return keys.filter((key) => !process.env[key]);
 }
 
-function getBackupRuntimeStatus() {
+async function getBackupRuntimeStatus() {
   const missingApiEnv = getMissingEnv(BACKUP_API_ENV_KEYS);
   const missingWorkerEnv = getMissingEnv(BACKUP_WORKER_ENV_KEYS);
+  let queueStatus = null;
+
+  try {
+    queueStatus = await getDbQueueStatus();
+  } catch (error) {
+    queueStatus = {
+      configured: Boolean(process.env.REDIS_URL),
+      workerOnline: false,
+      workerLastSeenAt: null,
+      counts: null,
+      error: error.message,
+    };
+  }
 
   return {
     apiReady: missingApiEnv.length === 0,
-    workerReady: missingWorkerEnv.length === 0,
+    workerReady: missingWorkerEnv.length === 0 && Boolean(queueStatus?.workerOnline),
     queueConfigured: Boolean(process.env.REDIS_URL),
+    queueStatus,
+    workerOnline: Boolean(queueStatus?.workerOnline),
+    workerLastSeenAt: queueStatus?.workerLastSeenAt || null,
     storageConfigured: Boolean(
       process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY,
     ),

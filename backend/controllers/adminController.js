@@ -123,7 +123,7 @@ async function listBackups(req, res) {
     res.json({
       items: backups,
       recoveries,
-      runtime: adminService.getBackupRuntimeStatus(),
+      runtime: await adminService.getBackupRuntimeStatus(),
     });
   } catch (error) {
     console.error("[adminController.listBackups]", error);

@@ -50,7 +50,16 @@ type RecoveryJob = {
 type BackupRuntime = {
   apiReady: boolean;
   workerReady: boolean;
+  workerOnline: boolean;
+  workerLastSeenAt: string | null;
   queueConfigured: boolean;
+  queueStatus: {
+    configured: boolean;
+    workerOnline: boolean;
+    workerLastSeenAt: string | null;
+    counts: Record<string, number> | null;
+    error?: string;
+  } | null;
   storageConfigured: boolean;
   missingApiEnv: string[];
   missingWorkerEnv: string[];
@@ -108,6 +117,15 @@ function formatSize(sizeBytes: number | null) {
   }
 
   return `${size.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function getAgeMinutes(value: string | null) {
+  if (!value) return null;
+
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return null;
+
+  return Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
 }
 
 export default function BackupScreen() {
@@ -185,7 +203,7 @@ export default function BackupScreen() {
   useFocusEffect(
     useCallback(() => {
       loadBackups();
-    }, []),
+    }, [loadBackups]),
   );
 
   useEffect(() => {
@@ -225,9 +243,36 @@ export default function BackupScreen() {
     if (!runtime.storageConfigured) {
       warnings.push("Supabase backup storage is not configured.");
     }
+    if (runtime.queueConfigured && !runtime.workerOnline) {
+      warnings.push(
+        "Database worker is offline. Queued jobs will not create or restore dump files until the worker is running.",
+      );
+    }
+    if (runtime.queueStatus?.error) {
+      warnings.push(`Queue status check failed: ${runtime.queueStatus.error}`);
+    }
 
     return warnings;
   }, [runtime]);
+
+  const stalledJobWarning = useMemo(() => {
+    const activeJobs = [...items, ...recoveries].filter((job) =>
+      ["queued", "processing"].includes(String(job.status).toLowerCase()),
+    );
+
+    if (!activeJobs.length) return null;
+
+    const oldestActiveJob = activeJobs.reduce((oldest, job) =>
+      new Date(job.createdAt).getTime() < new Date(oldest.createdAt).getTime()
+        ? job
+        : oldest,
+    );
+    const ageMinutes = getAgeMinutes(oldestActiveJob.createdAt);
+
+    if (ageMinutes == null || ageMinutes < 2) return null;
+
+    return `Oldest queued job has waited ${ageMinutes} min. No dump is saved while a backup stays queued; start the database worker to process it.`;
+  }, [items, recoveries]);
 
   const createBackup = async () => {
     try {
@@ -292,7 +337,8 @@ export default function BackupScreen() {
   };
 
   const renderRuntimeStatus = () => {
-    if (!runtime || runtimeWarnings.length === 0) return null;
+    if (!runtime && !stalledJobWarning) return null;
+    if (runtimeWarnings.length === 0 && !stalledJobWarning) return null;
 
     return (
       <View style={styles.runtimePanel}>
@@ -307,7 +353,24 @@ export default function BackupScreen() {
             {warning}
           </Text>
         ))}
-        <Text style={styles.runtimeHint}>{runtime.note}</Text>
+        {stalledJobWarning ? (
+          <Text style={styles.runtimeText}>{stalledJobWarning}</Text>
+        ) : null}
+        {runtime?.workerLastSeenAt ? (
+          <Text style={styles.runtimeText}>
+            Worker last seen {formatDate(runtime.workerLastSeenAt)}
+          </Text>
+        ) : null}
+        {runtime?.queueStatus?.counts ? (
+          <Text style={styles.runtimeText}>
+            Queue: {runtime.queueStatus.counts.waiting || 0} waiting,{" "}
+            {runtime.queueStatus.counts.active || 0} active,{" "}
+            {runtime.queueStatus.counts.failed || 0} failed
+          </Text>
+        ) : null}
+        {runtime?.note ? (
+          <Text style={styles.runtimeHint}>{runtime.note}</Text>
+        ) : null}
       </View>
     );
   };
@@ -339,6 +402,12 @@ export default function BackupScreen() {
               <Text style={styles.recoveryDate}>
                 Queued {formatDate(job.createdAt)}
               </Text>
+              {String(job.status).toLowerCase() === "queued" ? (
+                <Text style={styles.recoveryNote}>
+                  Waiting for the database worker to download the selected dump
+                  and restore it.
+                </Text>
+              ) : null}
               {job.errorMessage ? (
                 <Text style={styles.recoveryError}>{job.errorMessage}</Text>
               ) : null}
@@ -390,6 +459,24 @@ export default function BackupScreen() {
           <View style={styles.errorBox}>
             <Ionicons name="alert-circle-outline" size={15} color="#DC2626" />
             <Text style={styles.errorText}>{item.errorMessage}</Text>
+          </View>
+        ) : null}
+
+        {!item.errorMessage && String(item.status).toLowerCase() === "queued" ? (
+          <View style={styles.infoBox}>
+            <Ionicons name="hourglass-outline" size={15} color="#B45309" />
+            <Text style={styles.infoText}>
+              Waiting for the database worker. No dump file has been saved yet.
+            </Text>
+          </View>
+        ) : null}
+
+        {!item.errorMessage && String(item.status).toLowerCase() === "processing" ? (
+          <View style={styles.infoBox}>
+            <Ionicons name="sync-outline" size={15} color="#2563EB" />
+            <Text style={styles.infoText}>
+              Worker is creating the dump and uploading it to Supabase Storage.
+            </Text>
           </View>
         ) : null}
 
@@ -597,6 +684,12 @@ const styles = StyleSheet.create({
   recoveryTitle: { fontSize: 14, fontWeight: "800", color: "#111827" },
   recoverySubtitle: { fontSize: 12, color: "#64748B", marginTop: 3 },
   recoveryDate: { fontSize: 12, color: "#8A94A6", marginTop: 8 },
+  recoveryNote: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#92400E",
+    marginTop: 7,
+  },
   recoveryError: {
     fontSize: 12,
     lineHeight: 17,
@@ -649,6 +742,16 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   errorText: { flex: 1, fontSize: 12, lineHeight: 17, color: "#B91C1C" },
+  infoBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 7,
+    borderRadius: 12,
+    backgroundColor: "#FFFBEB",
+    padding: 10,
+    marginTop: 12,
+  },
+  infoText: { flex: 1, fontSize: 12, lineHeight: 17, color: "#92400E" },
   restoreButton: {
     minHeight: 44,
     borderRadius: 14,

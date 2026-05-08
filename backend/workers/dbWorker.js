@@ -30,7 +30,7 @@ const { promisify } = require("util");
 const { exec } = require("child_process");
 const { Worker } = require("bullmq");
 const pool = require("../db/pool");
-const { connection } = require("../queues/dbTasksQueue");
+const { DB_WORKER_HEARTBEAT_KEY, connection } = require("../queues/dbTasksQueue");
 const {
   downloadStorageUriToFile,
   uploadBackupArtifact,
@@ -41,6 +41,7 @@ const execAsync = promisify(exec);
 const DB_QUEUE_NAME = "db-tasks";
 const PG_DUMP_BIN = process.env.PG_DUMP_BIN || "pg_dump";
 const PG_RESTORE_BIN = process.env.PG_RESTORE_BIN || "pg_restore";
+let heartbeatTimer = null;
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -294,6 +295,31 @@ if (!connection) {
   throw new Error("REDIS_URL is required before starting dbWorker.");
 }
 
+async function writeWorkerHeartbeat() {
+  await connection.set(
+    DB_WORKER_HEARTBEAT_KEY,
+    JSON.stringify({
+      pid: process.pid,
+      timestamp: new Date().toISOString(),
+    }),
+    "EX",
+    45,
+  );
+}
+
+async function startWorkerHeartbeat() {
+  await writeWorkerHeartbeat();
+  heartbeatTimer = setInterval(() => {
+    writeWorkerHeartbeat().catch((error) => {
+      console.error("[dbWorker] heartbeat failed:", error);
+    });
+  }, 15000);
+}
+
+startWorkerHeartbeat().catch((error) => {
+  console.error("[dbWorker] initial heartbeat failed:", error);
+});
+
 const worker = new Worker(
   DB_QUEUE_NAME,
   async (job) => {
@@ -322,12 +348,14 @@ worker.on("failed", (job, error) => {
 });
 
 process.on("SIGTERM", async () => {
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
   await worker.close();
   await pool.end();
   process.exit(0);
 });
 
 process.on("SIGINT", async () => {
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
   await worker.close();
   await pool.end();
   process.exit(0);
