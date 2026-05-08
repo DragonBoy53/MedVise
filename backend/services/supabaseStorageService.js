@@ -8,7 +8,18 @@ const DEFAULT_CHAT_IMAGES_BUCKET = "chat-images";
 const DEFAULT_BACKUP_BUCKET = "database-backups";
 
 function getSupabaseUrl() {
-  return (process.env.SUPABASE_URL || "").replace(/\/+$/, "");
+  const raw = (process.env.SUPABASE_URL || "").trim();
+  if (!raw) return "";
+
+  try {
+    const parsed = new URL(raw);
+    return parsed.origin;
+  } catch {
+    return raw.replace(/\/+$/, "").replace(
+      /\/(?:storage|rest|auth|functions)\/v1\/?$/i,
+      "",
+    );
+  }
 }
 
 function getServiceKey() {
@@ -145,6 +156,12 @@ async function uploadFileToBucket({
   cacheControl = "3600",
 }) {
   const { supabaseUrl } = requireSupabaseStorageConfig();
+  if (!bucket) {
+    throw new Error("SUPABASE_BACKUP_BUCKET is empty or invalid.");
+  }
+  if (!objectPath) {
+    throw new Error("Supabase Storage object path is empty or invalid.");
+  }
   await ensureBucket(bucket);
 
   const url = `${supabaseUrl}/storage/v1/object/${encodeURIComponent(bucket)}/${encodeStoragePath(objectPath)}`;
@@ -165,6 +182,9 @@ async function uploadFileToBucket({
 
 async function ensureBucket(bucket) {
   const { supabaseUrl } = requireSupabaseStorageConfig();
+  if (!bucket) {
+    throw new Error("Supabase Storage bucket name is empty or invalid.");
+  }
   const bucketUrl = `${supabaseUrl}/storage/v1/bucket/${encodeURIComponent(bucket)}`;
 
   const existingBucket = await fetch(bucketUrl, {
