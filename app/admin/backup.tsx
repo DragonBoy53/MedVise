@@ -138,6 +138,8 @@ export default function BackupScreen() {
   const [creatingBackup, setCreatingBackup] = useState(false);
   const [restoringId, setRestoringId] = useState<number | null>(null);
   const initialLoadDoneRef = useRef(false);
+  const followUpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const followUpPollsRemainingRef = useRef(0);
 
   const getAuthHeaders = useCallback(async () => {
     if (!isLoaded || !isSignedIn) {
@@ -170,8 +172,24 @@ export default function BackupScreen() {
     return error?.response?.data?.message || error?.message || fallback;
   };
 
+  const stopFollowUpPolling = useCallback(() => {
+    if (followUpTimerRef.current) {
+      clearTimeout(followUpTimerRef.current);
+      followUpTimerRef.current = null;
+    }
+    followUpPollsRemainingRef.current = 0;
+  }, []);
+
+  const hasActiveJobs = useCallback(
+    (backupItems: BackupJob[], recoveryItems: RecoveryJob[]) =>
+      [...backupItems, ...recoveryItems].some((job) =>
+        ["queued", "processing"].includes(String(job.status).toLowerCase()),
+      ),
+    [],
+  );
+
   const loadBackups = useCallback(
-    async (isRefresh = false) => {
+    async (isRefresh = false, options?: { suppressAlert?: boolean }) => {
       try {
         if (isRefresh) {
           setRefreshing(true);
@@ -184,14 +202,27 @@ export default function BackupScreen() {
           headers,
           params: { _: Date.now() },
         });
-        setItems(response.data?.items || []);
-        setRecoveries(response.data?.recoveries || []);
-        setRuntime(response.data?.runtime || null);
+        const nextItems = response.data?.items || [];
+        const nextRecoveries = response.data?.recoveries || [];
+        const nextRuntime = response.data?.runtime || null;
+
+        setItems(nextItems);
+        setRecoveries(nextRecoveries);
+        setRuntime(nextRuntime);
+
+        return {
+          items: nextItems as BackupJob[],
+          recoveries: nextRecoveries as RecoveryJob[],
+          runtime: nextRuntime as BackupRuntime | null,
+        };
       } catch (error: any) {
-        Alert.alert(
-          "Backups unavailable",
-          getRequestErrorMessage(error, "Could not load backup jobs."),
-        );
+        if (!options?.suppressAlert) {
+          Alert.alert(
+            "Backups unavailable",
+            getRequestErrorMessage(error, "Could not load backup jobs."),
+          );
+        }
+        return null;
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -217,6 +248,31 @@ export default function BackupScreen() {
     // recreate callbacks and cause repeated fetches while the screen is open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded, isSignedIn]);
+
+  useEffect(() => stopFollowUpPolling, [stopFollowUpPolling]);
+
+  const scheduleFollowUpPolling = useCallback(() => {
+    stopFollowUpPolling();
+    followUpPollsRemainingRef.current = 18;
+
+    const poll = async () => {
+      const snapshot = await loadBackups(true, { suppressAlert: true });
+      const shouldContinue =
+        !!snapshot &&
+        hasActiveJobs(snapshot.items, snapshot.recoveries) &&
+        followUpPollsRemainingRef.current > 1;
+
+      if (!shouldContinue) {
+        stopFollowUpPolling();
+        return;
+      }
+
+      followUpPollsRemainingRef.current -= 1;
+      followUpTimerRef.current = setTimeout(poll, 5000);
+    };
+
+    followUpTimerRef.current = setTimeout(poll, 5000);
+  }, [hasActiveJobs, loadBackups, stopFollowUpPolling]);
 
   const latestCompleted = useMemo(
     () => items.find((item) => item.status === "completed"),
@@ -272,7 +328,10 @@ export default function BackupScreen() {
       setCreatingBackup(true);
       const headers = await getAuthHeaders();
       await apiClient.post("/api/admin/backup", {}, { headers });
-      await loadBackups(true);
+      const snapshot = await loadBackups(true);
+      if (snapshot && hasActiveJobs(snapshot.items, snapshot.recoveries)) {
+        scheduleFollowUpPolling();
+      }
     } catch (error: any) {
       Alert.alert(
         "Backup failed",
@@ -303,7 +362,10 @@ export default function BackupScreen() {
         { backupJobId: backup.id, targetEnv: "production" },
         { headers },
       );
-      await loadBackups(true);
+      const snapshot = await loadBackups(true);
+      if (snapshot && hasActiveJobs(snapshot.items, snapshot.recoveries)) {
+        scheduleFollowUpPolling();
+      }
     } catch (error: any) {
       Alert.alert(
         "Recovery failed",
