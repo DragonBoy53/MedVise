@@ -136,7 +136,7 @@ async function createBackup(req, res) {
       initiatedByClerkUserId: req.auth.clerkUserId || null,
     });
     res.status(202).json({
-      message: "Backup job queued. Attach a worker to run pg_dump and upload the artifact.",
+      message: "Backup job queued. The background worker will run pg_dump and upload the artifact to Supabase Storage.",
       job,
     });
   } catch (error) {
@@ -145,6 +145,11 @@ async function createBackup(req, res) {
       return res.status(503).json({
         message:
           "Admin database schema is not installed yet. Run backend/sql/admin_portal_schema.sql first.",
+      });
+    }
+    if (error.code === "QUEUE_NOT_CONFIGURED") {
+      return res.status(503).json({
+        message: "Backup queue is not configured. Add REDIS_URL and run the database worker.",
       });
     }
     res.status(500).json({ message: "Failed to queue backup job." });
@@ -163,8 +168,7 @@ async function createRecovery(req, res) {
     });
 
     return res.status(202).json({
-      message:
-        "Recovery job queued. Next step is implementing worker-side validation and restore orchestration.",
+      message: "Recovery job queued. The background worker will restore the selected backup.",
       job,
     });
   } catch (error) {
@@ -179,6 +183,16 @@ async function createRecovery(req, res) {
       return res.status(400).json({
         message:
           "No backup job exists yet. Run a backup first, then retry recovery.",
+      });
+    }
+    if (error.code === "BACKUP_NOT_RESTORABLE") {
+      return res.status(400).json({
+        message: "Only completed backups with uploaded Supabase Storage artifacts can be restored.",
+      });
+    }
+    if (error.code === "QUEUE_NOT_CONFIGURED") {
+      return res.status(503).json({
+        message: "Recovery queue is not configured. Add REDIS_URL and run the database worker.",
       });
     }
     res.status(500).json({ message: "Failed to queue recovery job." });

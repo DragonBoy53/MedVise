@@ -10,6 +10,10 @@ const {
   listChatSessionsForUser,
   persistChatInteraction,
 } = require("../services/chatPersistenceService");
+const {
+  isSupabaseStorageConfigured,
+  uploadChatImage,
+} = require("../services/supabaseStorageService");
 
 const MODEL_NAME = process.env.MODEL_NAME;
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL;
@@ -75,11 +79,27 @@ async function chatController(req, res) {
     const chatSessionId = req.body.chatSessionId || null;
     const promptText = message || (file ? "Please analyze this medical image." : "Hello");
     const history = parseHistory(req.body.history);
+    let imageAttachment = null;
 
     let messagePayload;
 
     if (file) {
       const imageBuffer = fs.readFileSync(file.path);
+      if (isSupabaseStorageConfigured()) {
+        try {
+          imageAttachment = await uploadChatImage({
+            file,
+            clerkUserId: req.auth?.clerkUserId || null,
+          });
+        } catch (storageError) {
+          console.error("[chatController] Supabase image upload failed:", storageError);
+        }
+      } else {
+        console.warn(
+          "[chatController] Supabase Storage is not configured; image metadata will be saved without a remote URL.",
+        );
+      }
+
       messagePayload = [
         {
           inlineData: {
@@ -181,6 +201,7 @@ async function chatController(req, res) {
         assistantMessage: replyText,
         prediction: lastPrediction,
         hadImage: Boolean(file),
+        imageAttachment,
       });
       res.locals.chatSessionId = savedChat.chatSessionId;
     } catch (persistenceError) {

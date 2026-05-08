@@ -4,6 +4,7 @@ const {
   calculateConfusionMatrix,
   calculateAUC,
 } = require("../utils/metricsCalculator");
+const { enqueueDbTask } = require("../queues/dbTasksQueue");
 const VALID_SPECIALTIES = ["cardiology", "diabetes", "thyroid"];
 
 function isUndefinedTableError(error) {
@@ -543,7 +544,30 @@ async function createBackupJob({ initiatedBy = null, initiatedByClerkUserId = nu
       [initiatedBy, initiatedByClerkUserId],
     );
 
-    return result.rows[0];
+    const backupJob = result.rows[0];
+
+    try {
+      await enqueueDbTask("backup", {
+        backupJobId: backupJob.id,
+      });
+    } catch (queueError) {
+      await pool.query(
+        `
+          UPDATE backup_jobs
+          SET status = 'failed',
+              completed_at = NOW(),
+              error_message = $2
+          WHERE id = $1
+        `,
+        [
+          backupJob.id,
+          `Failed to enqueue backup worker job: ${queueError.message}`.slice(0, 2000),
+        ],
+      );
+      throw queueError;
+    }
+
+    return backupJob;
   } catch (error) {
     if (isUndefinedTableError(error)) {
       error.code = "SCHEMA_NOT_READY";
@@ -578,6 +602,31 @@ async function createRecoveryJob({
       throw error;
     }
 
+    const backupResult = await pool.query(
+      `
+        SELECT id, status, storage_uri
+        FROM backup_jobs
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [effectiveBackupJobId],
+    );
+
+    const backup = backupResult.rows[0];
+    if (!backup) {
+      const error = new Error("Backup job does not exist.");
+      error.code = "NO_BACKUP_AVAILABLE";
+      throw error;
+    }
+
+    if (backup.status !== "completed" || !backup.storage_uri) {
+      const error = new Error(
+        "Only completed backups with uploaded Supabase Storage artifacts can be restored.",
+      );
+      error.code = "BACKUP_NOT_RESTORABLE";
+      throw error;
+    }
+
     const result = await pool.query(
       `
         INSERT INTO recovery_jobs (
@@ -601,7 +650,32 @@ async function createRecoveryJob({
       [effectiveBackupJobId, initiatedBy, initiatedByClerkUserId, targetEnv],
     );
 
-    return result.rows[0];
+    const recoveryJob = result.rows[0];
+
+    try {
+      await enqueueDbTask("restore", {
+        recoveryJobId: recoveryJob.id,
+        backupJobId: effectiveBackupJobId,
+        targetEnv: recoveryJob.targetEnv,
+      });
+    } catch (queueError) {
+      await pool.query(
+        `
+          UPDATE recovery_jobs
+          SET status = 'failed',
+              completed_at = NOW(),
+              error_message = $2
+          WHERE id = $1
+        `,
+        [
+          recoveryJob.id,
+          `Failed to enqueue restore worker job: ${queueError.message}`.slice(0, 2000),
+        ],
+      );
+      throw queueError;
+    }
+
+    return recoveryJob;
   } catch (error) {
     if (isUndefinedTableError(error)) {
       error.code = "SCHEMA_NOT_READY";

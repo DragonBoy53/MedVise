@@ -1,4 +1,8 @@
 const pool = require("../db/pool");
+const {
+  createSignedUrl,
+  isSupabaseStorageConfigured,
+} = require("./supabaseStorageService");
 
 function isSchemaError(error) {
   return error?.code === "42P01" || error?.code === "42703";
@@ -36,6 +40,7 @@ async function persistChatInteraction({
   assistantMessage,
   prediction,
   hadImage = false,
+  imageAttachment = null,
 }) {
   const summary = summarizeInteraction({
     userMessage,
@@ -94,11 +99,26 @@ async function persistChatInteraction({
             chat_session_id,
             sender_role,
             content_redacted,
+            attachment_type,
+            attachment_bucket,
+            attachment_path,
+            attachment_mime_type,
+            attachment_size_bytes,
+            attachment_original_name,
             created_at
           )
-          VALUES ($1, 'user', $2, NOW())
+          VALUES ($1, 'user', $2, $3, $4, $5, $6, $7, $8, NOW())
         `,
-        [activeChatSessionId, userMessage || "Image uploaded for model analysis."],
+        [
+          activeChatSessionId,
+          userMessage || (hadImage ? "Image uploaded for model analysis." : null),
+          imageAttachment?.attachmentType || null,
+          imageAttachment?.bucket || null,
+          imageAttachment?.path || null,
+          imageAttachment?.mimeType || null,
+          imageAttachment?.sizeBytes || null,
+          imageAttachment?.originalName || null,
+        ],
       );
     }
 
@@ -246,6 +266,12 @@ async function getChatSessionForUser({ clerkUserId, chatSessionId }) {
           id,
           sender_role AS "senderRole",
           content_redacted AS "content",
+          attachment_type AS "attachmentType",
+          attachment_bucket AS "attachmentBucket",
+          attachment_path AS "attachmentPath",
+          attachment_mime_type AS "attachmentMimeType",
+          attachment_size_bytes AS "attachmentSizeBytes",
+          attachment_original_name AS "attachmentOriginalName",
           created_at AS "createdAt"
         FROM chat_messages
         WHERE chat_session_id = $1
@@ -254,9 +280,35 @@ async function getChatSessionForUser({ clerkUserId, chatSessionId }) {
       [chatSessionId],
     );
 
+    const messages = await Promise.all(
+      messagesResult.rows.map(async (message) => {
+        if (
+          message.attachmentType === "image" &&
+          message.attachmentBucket &&
+          message.attachmentPath &&
+          isSupabaseStorageConfigured()
+        ) {
+          try {
+            return {
+              ...message,
+              imageUrl: await createSignedUrl({
+                bucket: message.attachmentBucket,
+                objectPath: message.attachmentPath,
+                expiresIn: 60 * 60,
+              }),
+            };
+          } catch (error) {
+            console.error("[chatPersistenceService] Signed URL failed:", error);
+          }
+        }
+
+        return { ...message, imageUrl: null };
+      }),
+    );
+
     return {
       ...session,
-      messages: messagesResult.rows,
+      messages,
     };
   } catch (error) {
     if (isSchemaError(error)) {

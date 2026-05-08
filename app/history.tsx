@@ -6,6 +6,7 @@ import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Modal,
   RefreshControl,
   ScrollView,
@@ -33,6 +34,10 @@ type ChatMessage = {
   id: number;
   senderRole: "user" | "assistant";
   content: string | null;
+  attachmentType: string | null;
+  attachmentMimeType: string | null;
+  attachmentOriginalName: string | null;
+  imageUrl: string | null;
   createdAt: string;
 };
 
@@ -62,7 +67,9 @@ function titleForSession(item: ChatSession) {
   return "MedVise chat";
 }
 
-function specialtyIcon(specialty: string | null): keyof typeof Ionicons.glyphMap {
+function specialtyIcon(
+  specialty: string | null,
+): keyof typeof Ionicons.glyphMap {
   const key = specialty?.toLowerCase();
   if (key === "cardiology") return "heart-outline";
   if (key === "diabetes") return "water-outline";
@@ -174,14 +181,19 @@ export default function HistoryScreen() {
                 disabled={detailLoading}
               >
                 <View style={styles.iconWrap}>
-                  <Ionicons name={specialtyIcon(item.specialty)} size={20} color="#111827" />
+                  <Ionicons
+                    name={specialtyIcon(item.specialty)}
+                    size={20}
+                    color="#111827"
+                  />
                 </View>
                 <View style={styles.cardBody}>
                   <Text style={styles.cardTitle} numberOfLines={1}>
                     {titleForSession(item)}
                   </Text>
                   <Text style={styles.cardMeta}>
-                    {formatDateTime(item.lastMessageAt)} - {item.messageCount} messages
+                    {formatDateTime(item.lastMessageAt)} - {item.messageCount}{" "}
+                    messages
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="#C5CBD5" />
@@ -194,7 +206,8 @@ export default function HistoryScreen() {
               </View>
               <Text style={styles.emptyTitle}>No saved chats yet</Text>
               <Text style={styles.emptySubtitle}>
-                Send a message to MedVise and the conversation will appear here with its date and time.
+                Send a message to MedVise and the conversation will appear here
+                with its date and time.
               </Text>
             </View>
           )}
@@ -218,7 +231,10 @@ export default function HistoryScreen() {
                   </Text>
                 ) : null}
               </View>
-              <TouchableOpacity onPress={() => setSelectedChat(null)} style={styles.closeBtn}>
+              <TouchableOpacity
+                onPress={() => setSelectedChat(null)}
+                style={styles.closeBtn}
+              >
                 <Ionicons name="close" size={20} color="#64748B" />
               </TouchableOpacity>
             </View>
@@ -233,12 +249,33 @@ export default function HistoryScreen() {
                 return (
                   <View
                     key={message.id}
-                    style={[styles.messageBubble, fromUser ? styles.userBubble : styles.assistantBubble]}
+                    style={[
+                      styles.messageBubble,
+                      fromUser ? styles.userBubble : styles.assistantBubble,
+                    ]}
                   >
-                    <Text style={[styles.messageText, fromUser && styles.userMessageText]}>
-                      {message.content || ""}
-                    </Text>
-                    <Text style={[styles.messageTime, fromUser && styles.userMessageTime]}>
+                    {message.imageUrl ? (
+                      <Image
+                        source={{ uri: message.imageUrl }}
+                        style={styles.messageImage}
+                      />
+                    ) : null}
+                    {message.content ? (
+                      <Text
+                        style={[
+                          styles.messageText,
+                          fromUser && styles.userMessageText,
+                        ]}
+                      >
+                        {message.content}
+                      </Text>
+                    ) : null}
+                    <Text
+                      style={[
+                        styles.messageTime,
+                        fromUser && styles.userMessageTime,
+                      ]}
+                    >
                       {formatDateTime(message.createdAt)}
                     </Text>
                   </View>
@@ -376,6 +413,14 @@ const styles = StyleSheet.create({
   },
   messageText: { fontSize: 14, lineHeight: 20, color: "#111827" },
   userMessageText: { color: "#fff" },
+  messageImage: {
+    width: 220,
+    height: 220,
+    maxWidth: "100%",
+    borderRadius: 14,
+    backgroundColor: "#E2E8F0",
+    marginBottom: 8,
+  },
   messageTime: { fontSize: 10, color: "#94A3B8", marginTop: 6 },
   userMessageTime: { color: "#CBD5E1" },
 });

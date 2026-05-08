@@ -121,6 +121,12 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   sender_role TEXT NOT NULL,
   content_redacted TEXT,
   content_encrypted TEXT,
+  attachment_type TEXT,
+  attachment_bucket TEXT,
+  attachment_path TEXT,
+  attachment_mime_type TEXT,
+  attachment_size_bytes BIGINT,
+  attachment_original_name TEXT,
   token_count INTEGER,
   latency_ms INTEGER,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -217,6 +223,14 @@ ALTER TABLE retraining_feedback_queue
 ALTER TABLE chat_sessions
   ADD COLUMN IF NOT EXISTS clerk_user_id TEXT;
 
+ALTER TABLE chat_messages
+  ADD COLUMN IF NOT EXISTS attachment_type TEXT,
+  ADD COLUMN IF NOT EXISTS attachment_bucket TEXT,
+  ADD COLUMN IF NOT EXISTS attachment_path TEXT,
+  ADD COLUMN IF NOT EXISTS attachment_mime_type TEXT,
+  ADD COLUMN IF NOT EXISTS attachment_size_bytes BIGINT,
+  ADD COLUMN IF NOT EXISTS attachment_original_name TEXT;
+
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -287,6 +301,10 @@ CREATE INDEX IF NOT EXISTS idx_chat_sessions_clerk_user_last_message
 
 CREATE INDEX IF NOT EXISTS idx_chat_messages_session_created_at
   ON chat_messages(chat_session_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_attachment_path
+  ON chat_messages(attachment_bucket, attachment_path)
+  WHERE attachment_path IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_chat_reviews_session_created_at
   ON chat_reviews(chat_session_id, created_at DESC);
