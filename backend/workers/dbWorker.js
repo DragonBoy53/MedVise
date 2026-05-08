@@ -119,6 +119,35 @@ async function markRecoveryCompleted({ recoveryJobId, backupJobId, targetEnv }) 
   );
 }
 
+async function markRecoveryProcessing(recoveryJobId) {
+  try {
+    await pool.query(
+      `
+        UPDATE recovery_jobs
+        SET status = 'processing',
+            started_at = NOW(),
+            error_message = NULL
+        WHERE id = $1
+      `,
+      [recoveryJobId],
+    );
+  } catch (error) {
+    if (error?.code !== "42703") {
+      throw error;
+    }
+
+    await pool.query(
+      `
+        UPDATE recovery_jobs
+        SET status = 'processing',
+            error_message = NULL
+        WHERE id = $1
+      `,
+      [recoveryJobId],
+    );
+  }
+}
+
 async function handleBackup(job) {
   requireEnv("DATABASE_URL");
   requireEnv("REDIS_URL");
@@ -210,16 +239,7 @@ async function handleRestore(job) {
   );
 
   try {
-    await pool.query(
-      `
-        UPDATE recovery_jobs
-        SET status = 'processing',
-            started_at = NOW(),
-            error_message = NULL
-        WHERE id = $1
-      `,
-      [recoveryJobId],
-    );
+    await markRecoveryProcessing(recoveryJobId);
 
     const backupResult = await pool.query(
       `

@@ -185,7 +185,7 @@ export default function BackupScreen() {
   useFocusEffect(
     useCallback(() => {
       loadBackups();
-    }, [loadBackups]),
+    }, []),
   );
 
   useEffect(() => {
@@ -298,7 +298,9 @@ export default function BackupScreen() {
       <View style={styles.runtimePanel}>
         <View style={styles.runtimeHeader}>
           <Ionicons name="construct-outline" size={18} color="#B45309" />
-          <Text style={styles.runtimeTitle}>Backup Environment Needs Setup</Text>
+          <Text style={styles.runtimeTitle}>
+            Backup Environment Needs Setup
+          </Text>
         </View>
         {runtimeWarnings.map((warning) => (
           <Text key={warning} style={styles.runtimeText}>

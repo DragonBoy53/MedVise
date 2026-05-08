@@ -570,7 +570,7 @@ async function listRecoveryJobs() {
         status,
         target_env AS "targetEnv",
         confirmed_at AS "confirmedAt",
-        started_at AS "startedAt",
+        NULL AS "startedAt",
         completed_at AS "completedAt",
         created_at AS "createdAt",
         error_message AS "errorMessage"

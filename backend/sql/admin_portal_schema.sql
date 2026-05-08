@@ -212,7 +212,8 @@ ALTER TABLE backup_jobs
   ADD COLUMN IF NOT EXISTS initiated_by_clerk_user_id TEXT;
 
 ALTER TABLE recovery_jobs
-  ADD COLUMN IF NOT EXISTS initiated_by_clerk_user_id TEXT;
+  ADD COLUMN IF NOT EXISTS initiated_by_clerk_user_id TEXT,
+  ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
 
 ALTER TABLE chat_reviews
   ADD COLUMN IF NOT EXISTS reviewed_by_clerk_user_id TEXT;
