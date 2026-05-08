@@ -20,7 +20,8 @@
  * your own server.
  */
 const path = require("path");
-require("dotenv").config({ path: path.resolve(__dirname, "..", "..", ".env") });
+const { loadEnv } = require("../config/loadEnv");
+loadEnv();
 
 const crypto = require("crypto");
 const fs = require("fs");
@@ -292,7 +293,9 @@ async function handleRestore(job) {
 }
 
 if (!connection) {
-  throw new Error("REDIS_URL is required before starting dbWorker.");
+  throw new Error(
+    "A valid REDIS_URL starting with redis:// or rediss:// is required before starting dbWorker.",
+  );
 }
 
 async function writeWorkerHeartbeat() {

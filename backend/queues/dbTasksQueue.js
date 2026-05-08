@@ -4,13 +4,21 @@ const IORedis = require("ioredis");
 const redisUrl = process.env.REDIS_URL;
 const DB_WORKER_HEARTBEAT_KEY = "medvise:db-worker:heartbeat";
 
+function isValidRedisUrl(value) {
+  return /^rediss?:\/\/.+/i.test(String(value || "").trim());
+}
+
 if (!redisUrl) {
   console.warn(
     "[dbTasksQueue] REDIS_URL is not set. Backup and recovery jobs cannot be queued until Redis is configured.",
   );
+} else if (!isValidRedisUrl(redisUrl)) {
+  console.warn(
+    "[dbTasksQueue] REDIS_URL must start with redis:// or rediss://. Backup and recovery jobs cannot run with the current value.",
+  );
 }
 
-const connection = redisUrl
+const connection = redisUrl && isValidRedisUrl(redisUrl)
   ? new IORedis(redisUrl, {
       maxRetriesPerRequest: null,
       enableReadyCheck: false,

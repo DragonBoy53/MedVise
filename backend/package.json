@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "check:worker-env": "node scripts/checkWorkerEnv.js",
     "worker:db": "node workers/dbWorker.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
