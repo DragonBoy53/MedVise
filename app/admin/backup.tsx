@@ -1,7 +1,7 @@
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -137,6 +137,7 @@ export default function BackupScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [creatingBackup, setCreatingBackup] = useState(false);
   const [restoringId, setRestoringId] = useState<number | null>(null);
+  const initialLoadDoneRef = useRef(false);
 
   const getAuthHeaders = useCallback(async () => {
     if (!isLoaded || !isSignedIn) {
@@ -199,27 +200,20 @@ export default function BackupScreen() {
     [getAuthHeaders],
   );
 
-  useEffect(
-    useCallback(() => {
-      loadBackups();
-    }, [loadBackups]),
-  );
-
   useEffect(() => {
-    const isActive = (status: BackupStatus) =>
-      ["queued", "processing"].includes(String(status).toLowerCase());
-    const hasActiveJob =
-      items.some((item) => isActive(item.status)) ||
-      recoveries.some((item) => isActive(item.status));
+    if (!isLoaded) return;
 
-    if (!hasActiveJob) return;
+    if (!isSignedIn) {
+      initialLoadDoneRef.current = false;
+      setLoading(false);
+      return;
+    }
 
-    const timer = setInterval(() => {
-      loadBackups(true);
-    }, 15000);
+    if (initialLoadDoneRef.current) return;
 
-    return () => clearInterval(timer);
-  }, [items, recoveries, loadBackups]);
+    initialLoadDoneRef.current = true;
+    loadBackups();
+  }, [isLoaded, isSignedIn, loadBackups]);
 
   const latestCompleted = useMemo(
     () => items.find((item) => item.status === "completed"),
