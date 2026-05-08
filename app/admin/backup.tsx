@@ -237,15 +237,12 @@ export default function BackupScreen() {
     if (runtime.missingWorkerEnv.length) {
       warnings.push(`Worker missing: ${runtime.missingWorkerEnv.join(", ")}`);
     }
-    if (!runtime.queueConfigured) {
-      warnings.push("Queue is offline until REDIS_URL is configured.");
-    }
     if (!runtime.storageConfigured) {
       warnings.push("Supabase backup storage is not configured.");
     }
     if (runtime.queueConfigured && !runtime.workerOnline) {
       warnings.push(
-        "Database worker is offline. Queued jobs will not create or restore dump files until the worker is running.",
+        "Database worker is offline. Queued jobs in Neon will not create or restore dump files until the worker is running.",
       );
     }
     if (runtime.queueStatus?.error) {
@@ -271,7 +268,7 @@ export default function BackupScreen() {
 
     if (ageMinutes == null || ageMinutes < 2) return null;
 
-    return `Oldest queued job has waited ${ageMinutes} min. No dump is saved while a backup stays queued; start the database worker to process it.`;
+    return `Oldest queued job has waited ${ageMinutes} min. No dump is saved while a backup stays queued in Neon; start the database worker to process it.`;
   }, [items, recoveries]);
 
   const createBackup = async () => {
@@ -517,7 +514,7 @@ export default function BackupScreen() {
         <View style={styles.heroText}>
           <Text style={styles.heroTitle}>Database Backups</Text>
           <Text style={styles.heroSubtitle}>
-            Backups run in a Redis worker and are stored as Supabase Storage
+            Backups run in a database worker and are stored as Supabase Storage
             artifacts.
           </Text>
         </View>

@@ -158,7 +158,7 @@ async function createBackup(req, res) {
     }
     if (error.code === "QUEUE_NOT_CONFIGURED") {
       return res.status(503).json({
-        message: "Backup queue is not configured. Add REDIS_URL and run the database worker.",
+        message: "Backup worker is not configured. Start the database worker.",
       });
     }
     res.status(500).json({ message: "Failed to queue backup job." });
@@ -202,7 +202,7 @@ async function createRecovery(req, res) {
     }
     if (error.code === "QUEUE_NOT_CONFIGURED") {
       return res.status(503).json({
-        message: "Recovery queue is not configured. Add REDIS_URL and run the database worker.",
+        message: "Recovery worker is not configured. Start the database worker.",
       });
     }
     res.status(500).json({ message: "Failed to queue recovery job." });

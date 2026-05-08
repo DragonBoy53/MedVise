@@ -103,6 +103,12 @@ CREATE TABLE IF NOT EXISTS recovery_jobs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS worker_heartbeats (
+  heartbeat_key TEXT PRIMARY KEY,
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
 CREATE TABLE IF NOT EXISTS chat_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,

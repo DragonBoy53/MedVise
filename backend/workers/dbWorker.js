@@ -2,10 +2,9 @@
  * MedVise database backup and recovery worker.
  *
  * Required environment variables:
- * - DATABASE_URL: Postgres connection string used by the API and worker.
- * - REDIS_URL: Redis connection string used by BullMQ.
- * - SUPABASE_URL: Supabase project URL.
- * - SUPABASE_SERVICE_ROLE_KEY: Supabase service role key for private storage.
+ * - DATABASE_URL: Neon/Postgres connection string used by the API and worker.
+ * - SUPABASE_URL: Supabase project URL for private dump storage.
+ * - SUPABASE_SERVICE_ROLE_KEY: Supabase service role key for Storage access.
  *
  * Optional environment variables:
  * - SUPABASE_BACKUP_BUCKET: bucket where database dump artifacts are stored.
@@ -13,11 +12,11 @@
  * - PG_DUMP_BIN: pg_dump binary path, defaults to "pg_dump".
  * - PG_RESTORE_BIN: pg_restore binary path, defaults to "pg_restore".
  * - RESTORE_DATABASE_URL: restore target DB. Defaults to DATABASE_URL.
+ * - DB_WORKER_POLL_INTERVAL_MS: idle poll interval, defaults to 15000.
  *
  * The machine running this worker must have PostgreSQL client tools installed.
- * Vercel serverless functions should enqueue jobs only; run this worker on a
- * persistent process host such as Render Background Worker, Railway, Fly.io, or
- * your own server.
+ * Vercel serverless functions should create rows only; this worker polls Neon
+ * for queued jobs and stores dump artifacts in Supabase Storage.
  */
 const path = require("path");
 const { loadEnv } = require("../config/loadEnv");
@@ -29,9 +28,7 @@ const fsp = require("fs/promises");
 const os = require("os");
 const { promisify } = require("util");
 const { exec } = require("child_process");
-const { Worker } = require("bullmq");
 const pool = require("../db/pool");
-const { DB_WORKER_HEARTBEAT_KEY, connection } = require("../queues/dbTasksQueue");
 const {
   downloadStorageUriToFile,
   uploadBackupArtifact,
@@ -39,10 +36,10 @@ const {
 
 const execAsync = promisify(exec);
 
-const DB_QUEUE_NAME = "db-tasks";
 const PG_DUMP_BIN = process.env.PG_DUMP_BIN || "pg_dump";
 const PG_RESTORE_BIN = process.env.PG_RESTORE_BIN || "pg_restore";
-let heartbeatTimer = null;
+const POLL_INTERVAL_MS = Number(process.env.DB_WORKER_POLL_INTERVAL_MS || 15000);
+let shutdownRequested = false;
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -54,6 +51,10 @@ function requireEnv(name) {
 
 function shellQuote(value) {
   return `"${String(value).replace(/(["`$\\])/g, "\\$1")}"`;
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function getFileSize(filePath) {
@@ -70,6 +71,37 @@ async function sha256File(filePath) {
     stream.on("error", reject);
     stream.on("end", () => resolve(hash.digest("hex")));
   });
+}
+
+async function updateWorkerHeartbeat() {
+  try {
+    await pool.query(
+      `
+        INSERT INTO worker_heartbeats (heartbeat_key, last_seen_at, metadata_json)
+        VALUES ('db-worker', NOW(), $1::jsonb)
+        ON CONFLICT (heartbeat_key)
+        DO UPDATE SET
+          last_seen_at = EXCLUDED.last_seen_at,
+          metadata_json = EXCLUDED.metadata_json
+      `,
+      [
+        JSON.stringify({
+          pid: process.pid,
+          host: os.hostname(),
+          pollIntervalMs: POLL_INTERVAL_MS,
+        }),
+      ],
+    );
+  } catch (error) {
+    if (error?.code === "42P01") {
+      console.warn(
+        "[dbWorker] worker_heartbeats table is missing. Run backend/sql/admin_portal_schema.sql on Neon to show worker status in the app.",
+      );
+      return;
+    }
+
+    throw error;
+  }
 }
 
 async function updateBackupFailure(backupJobId, error) {
@@ -121,60 +153,77 @@ async function markRecoveryCompleted({ recoveryJobId, backupJobId, targetEnv }) 
   );
 }
 
-async function markRecoveryProcessing(recoveryJobId) {
+async function claimNextBackupJob() {
+  const result = await pool.query(`
+    UPDATE backup_jobs
+    SET status = 'processing',
+        started_at = NOW(),
+        error_message = NULL
+    WHERE id = (
+      SELECT id
+      FROM backup_jobs
+      WHERE status = 'queued'
+      ORDER BY created_at ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT 1
+    )
+    RETURNING id
+  `);
+
+  return result.rows[0] || null;
+}
+
+async function claimNextRecoveryJob() {
+  let result;
+
   try {
-    await pool.query(
-      `
-        UPDATE recovery_jobs
-        SET status = 'processing',
-            started_at = NOW(),
-            error_message = NULL
-        WHERE id = $1
-      `,
-      [recoveryJobId],
-    );
+    result = await pool.query(`
+      UPDATE recovery_jobs
+      SET status = 'processing',
+          started_at = NOW(),
+          error_message = NULL
+      WHERE id = (
+        SELECT id
+        FROM recovery_jobs
+        WHERE status = 'queued'
+        ORDER BY created_at ASC
+        FOR UPDATE SKIP LOCKED
+        LIMIT 1
+      )
+      RETURNING id, backup_job_id AS "backupJobId", target_env AS "targetEnv"
+    `);
   } catch (error) {
     if (error?.code !== "42703") {
       throw error;
     }
 
-    await pool.query(
-      `
-        UPDATE recovery_jobs
-        SET status = 'processing',
-            error_message = NULL
-        WHERE id = $1
-      `,
-      [recoveryJobId],
-    );
+    result = await pool.query(`
+      UPDATE recovery_jobs
+      SET status = 'processing',
+          error_message = NULL
+      WHERE id = (
+        SELECT id
+        FROM recovery_jobs
+        WHERE status = 'queued'
+        ORDER BY created_at ASC
+        FOR UPDATE SKIP LOCKED
+        LIMIT 1
+      )
+      RETURNING id, backup_job_id AS "backupJobId", target_env AS "targetEnv"
+    `);
   }
+
+  return result.rows[0] || null;
 }
 
-async function handleBackup(job) {
+async function handleBackup(backupJobId) {
   requireEnv("DATABASE_URL");
-  requireEnv("REDIS_URL");
   requireEnv("SUPABASE_URL");
   requireEnv("SUPABASE_SERVICE_ROLE_KEY");
-
-  const { backupJobId } = job.data;
-  if (!backupJobId) {
-    throw new Error("backupJobId is required.");
-  }
 
   const dumpPath = path.join(os.tmpdir(), `medvise-backup-${backupJobId}.dump`);
 
   try {
-    await pool.query(
-      `
-        UPDATE backup_jobs
-        SET status = 'processing',
-            started_at = NOW(),
-            error_message = NULL
-        WHERE id = $1
-      `,
-      [backupJobId],
-    );
-
     const dumpCommand = [
       shellQuote(PG_DUMP_BIN),
       "--format=custom",
@@ -224,16 +273,10 @@ async function handleBackup(job) {
   }
 }
 
-async function handleRestore(job) {
+async function handleRestore({ recoveryJobId, backupJobId, targetEnv }) {
   requireEnv("DATABASE_URL");
-  requireEnv("REDIS_URL");
   requireEnv("SUPABASE_URL");
   requireEnv("SUPABASE_SERVICE_ROLE_KEY");
-
-  const { recoveryJobId, backupJobId, targetEnv } = job.data;
-  if (!recoveryJobId || !backupJobId) {
-    throw new Error("recoveryJobId and backupJobId are required.");
-  }
 
   const restorePath = path.join(
     os.tmpdir(),
@@ -241,8 +284,6 @@ async function handleRestore(job) {
   );
 
   try {
-    await markRecoveryProcessing(recoveryJobId);
-
     const backupResult = await pool.query(
       `
         SELECT storage_uri AS "storageUri"
@@ -292,74 +333,61 @@ async function handleRestore(job) {
   }
 }
 
-if (!connection) {
-  throw new Error(
-    "A valid REDIS_URL starting with redis:// or rediss:// is required before starting dbWorker.",
-  );
-}
+async function processNextJob() {
+  await updateWorkerHeartbeat();
 
-async function writeWorkerHeartbeat() {
-  await connection.set(
-    DB_WORKER_HEARTBEAT_KEY,
-    JSON.stringify({
-      pid: process.pid,
-      timestamp: new Date().toISOString(),
-    }),
-    "EX",
-    45,
-  );
-}
+  const backupJob = await claimNextBackupJob();
+  if (backupJob) {
+    console.log(`[dbWorker] Processing backup job ${backupJob.id}.`);
+    await handleBackup(backupJob.id);
+    console.log(`[dbWorker] Backup job ${backupJob.id} completed.`);
+    return true;
+  }
 
-async function startWorkerHeartbeat() {
-  await writeWorkerHeartbeat();
-  heartbeatTimer = setInterval(() => {
-    writeWorkerHeartbeat().catch((error) => {
-      console.error("[dbWorker] heartbeat failed:", error);
+  const recoveryJob = await claimNextRecoveryJob();
+  if (recoveryJob) {
+    console.log(`[dbWorker] Processing recovery job ${recoveryJob.id}.`);
+    await handleRestore({
+      recoveryJobId: recoveryJob.id,
+      backupJobId: recoveryJob.backupJobId,
+      targetEnv: recoveryJob.targetEnv,
     });
-  }, 15000);
+    console.log(`[dbWorker] Recovery job ${recoveryJob.id} completed.`);
+    return true;
+  }
+
+  return false;
 }
 
-startWorkerHeartbeat().catch((error) => {
-  console.error("[dbWorker] initial heartbeat failed:", error);
-});
+async function runWorkerLoop() {
+  requireEnv("DATABASE_URL");
+  requireEnv("SUPABASE_URL");
+  requireEnv("SUPABASE_SERVICE_ROLE_KEY");
 
-const worker = new Worker(
-  DB_QUEUE_NAME,
-  async (job) => {
-    if (job.name === "backup") {
-      return handleBackup(job);
+  console.log("[dbWorker] Started. Polling Neon for queued backup/recovery jobs.");
+
+  while (!shutdownRequested) {
+    try {
+      const processedJob = await processNextJob();
+      await delay(processedJob ? 1000 : POLL_INTERVAL_MS);
+    } catch (error) {
+      console.error("[dbWorker] Worker loop failed:", error);
+      await delay(POLL_INTERVAL_MS);
     }
+  }
+}
 
-    if (job.name === "restore") {
-      return handleRestore(job);
-    }
-
-    throw new Error(`Unknown db task: ${job.name}`);
-  },
-  {
-    connection,
-    concurrency: 1,
-  },
-);
-
-worker.on("completed", (job) => {
-  console.log(`[dbWorker] ${job.name} job ${job.id} completed.`);
-});
-
-worker.on("failed", (job, error) => {
-  console.error(`[dbWorker] ${job?.name} job ${job?.id} failed:`, error);
-});
-
-process.on("SIGTERM", async () => {
-  if (heartbeatTimer) clearInterval(heartbeatTimer);
-  await worker.close();
+async function shutdown() {
+  shutdownRequested = true;
   await pool.end();
   process.exit(0);
-});
+}
 
-process.on("SIGINT", async () => {
-  if (heartbeatTimer) clearInterval(heartbeatTimer);
-  await worker.close();
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
+
+runWorkerLoop().catch(async (error) => {
+  console.error("[dbWorker] Fatal startup error:", error);
   await pool.end();
-  process.exit(0);
+  process.exit(1);
 });

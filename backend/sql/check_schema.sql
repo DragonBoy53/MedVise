@@ -37,6 +37,15 @@ SELECT
 UNION ALL
 
 SELECT
+  'worker_heartbeats table',
+  EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'worker_heartbeats'
+  )
+
+UNION ALL
+
+SELECT
   'prediction_events.clerk_user_id column',
   EXISTS (
     SELECT 1 FROM information_schema.columns

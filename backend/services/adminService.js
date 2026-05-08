@@ -4,11 +4,9 @@ const {
   calculateConfusionMatrix,
   calculateAUC,
 } = require("../utils/metricsCalculator");
-const { enqueueDbTask, getDbQueueStatus } = require("../queues/dbTasksQueue");
 const VALID_SPECIALTIES = ["cardiology", "diabetes", "thyroid"];
 const BACKUP_API_ENV_KEYS = [
   "DATABASE_URL",
-  "REDIS_URL",
   "SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
 ];
@@ -22,27 +20,69 @@ function getMissingEnv(keys) {
   return keys.filter((key) => !process.env[key]);
 }
 
-async function getBackupRuntimeStatus() {
-  const missingApiEnv = getMissingEnv(BACKUP_API_ENV_KEYS);
-  const missingWorkerEnv = getMissingEnv(BACKUP_WORKER_ENV_KEYS);
-  let queueStatus = null;
-
+async function getDatabaseJobStatus() {
   try {
-    queueStatus = await getDbQueueStatus();
+    const [countsResult, heartbeatResult] = await Promise.all([
+      pool.query(`
+        SELECT
+          COALESCE(SUM(CASE WHEN status = 'queued' THEN count ELSE 0 END), 0)::int AS waiting,
+          COALESCE(SUM(CASE WHEN status = 'processing' THEN count ELSE 0 END), 0)::int AS active,
+          COALESCE(SUM(CASE WHEN status = 'completed' THEN count ELSE 0 END), 0)::int AS completed,
+          COALESCE(SUM(CASE WHEN status = 'failed' THEN count ELSE 0 END), 0)::int AS failed
+        FROM (
+          SELECT status, COUNT(*)::int AS count
+          FROM backup_jobs
+          GROUP BY status
+          UNION ALL
+          SELECT status, COUNT(*)::int AS count
+          FROM recovery_jobs
+          GROUP BY status
+        ) job_counts
+      `),
+      pool.query(
+        `
+          SELECT last_seen_at AS "lastSeenAt", metadata_json AS "metadata"
+          FROM worker_heartbeats
+          WHERE heartbeat_key = 'db-worker'
+          LIMIT 1
+        `,
+      ),
+    ]);
+
+    const lastSeenAt = heartbeatResult.rows[0]?.lastSeenAt || null;
+    const lastSeenMs = lastSeenAt ? new Date(lastSeenAt).getTime() : null;
+    const ageMs = lastSeenMs ? Date.now() - lastSeenMs : null;
+
+    return {
+      configured: true,
+      workerOnline: ageMs != null && ageMs < 60 * 1000,
+      workerLastSeenAt: lastSeenAt,
+      counts: countsResult.rows[0] || null,
+      metadata: heartbeatResult.rows[0]?.metadata || null,
+    };
   } catch (error) {
-    queueStatus = {
-      configured: Boolean(process.env.REDIS_URL),
+    return {
+      configured: false,
       workerOnline: false,
       workerLastSeenAt: null,
       counts: null,
-      error: error.message,
+      error:
+        error?.code === "42P01"
+          ? "Worker heartbeat schema is missing. Run backend/sql/admin_portal_schema.sql on Neon."
+          : error.message,
     };
   }
+}
+
+async function getBackupRuntimeStatus() {
+  const missingApiEnv = getMissingEnv(BACKUP_API_ENV_KEYS);
+  const missingWorkerEnv = getMissingEnv(BACKUP_WORKER_ENV_KEYS);
+  const queueStatus = await getDatabaseJobStatus();
 
   return {
     apiReady: missingApiEnv.length === 0,
     workerReady: missingWorkerEnv.length === 0 && Boolean(queueStatus?.workerOnline),
-    queueConfigured: Boolean(process.env.REDIS_URL),
+    queueConfigured: true,
     queueStatus,
     workerOnline: Boolean(queueStatus?.workerOnline),
     workerLastSeenAt: queueStatus?.workerLastSeenAt || null,
@@ -54,7 +94,7 @@ async function getBackupRuntimeStatus() {
     backupBucket: process.env.SUPABASE_BACKUP_BUCKET || "database-backups",
     workerCommand: "npm run worker:db",
     note:
-      "Backups and recovery are executed by the database worker, which must run outside Vercel serverless with PostgreSQL client tools available.",
+      "Backups and recovery are executed by the database worker, which polls Neon for queued jobs and stores dump files in Supabase Storage.",
   };
 }
 
@@ -622,27 +662,6 @@ async function createBackupJob({ initiatedBy = null, initiatedByClerkUserId = nu
 
     const backupJob = result.rows[0];
 
-    try {
-      await enqueueDbTask("backup", {
-        backupJobId: backupJob.id,
-      });
-    } catch (queueError) {
-      await pool.query(
-        `
-          UPDATE backup_jobs
-          SET status = 'failed',
-              completed_at = NOW(),
-              error_message = $2
-          WHERE id = $1
-        `,
-        [
-          backupJob.id,
-          `Failed to enqueue backup worker job: ${queueError.message}`.slice(0, 2000),
-        ],
-      );
-      throw queueError;
-    }
-
     return backupJob;
   } catch (error) {
     if (isUndefinedTableError(error)) {
@@ -727,29 +746,6 @@ async function createRecoveryJob({
     );
 
     const recoveryJob = result.rows[0];
-
-    try {
-      await enqueueDbTask("restore", {
-        recoveryJobId: recoveryJob.id,
-        backupJobId: effectiveBackupJobId,
-        targetEnv: recoveryJob.targetEnv,
-      });
-    } catch (queueError) {
-      await pool.query(
-        `
-          UPDATE recovery_jobs
-          SET status = 'failed',
-              completed_at = NOW(),
-              error_message = $2
-          WHERE id = $1
-        `,
-        [
-          recoveryJob.id,
-          `Failed to enqueue restore worker job: ${queueError.message}`.slice(0, 2000),
-        ],
-      );
-      throw queueError;
-    }
 
     return recoveryJob;
   } catch (error) {
