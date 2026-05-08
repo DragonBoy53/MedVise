@@ -115,8 +115,16 @@ async function generateMetricsSnapshot(req, res) {
 
 async function listBackups(req, res) {
   try {
-    const backups = await adminService.listBackupJobs();
-    res.json({ items: backups });
+    res.set("Cache-Control", "no-store");
+    const [backups, recoveries] = await Promise.all([
+      adminService.listBackupJobs(),
+      adminService.listRecoveryJobs(),
+    ]);
+    res.json({
+      items: backups,
+      recoveries,
+      runtime: adminService.getBackupRuntimeStatus(),
+    });
   } catch (error) {
     console.error("[adminController.listBackups]", error);
     if (error.code === "SCHEMA_NOT_READY") {
@@ -131,6 +139,7 @@ async function listBackups(req, res) {
 
 async function createBackup(req, res) {
   try {
+    res.set("Cache-Control", "no-store");
     const job = await adminService.createBackupJob({
       initiatedBy: req.auth.localUserId || null,
       initiatedByClerkUserId: req.auth.clerkUserId || null,
@@ -158,6 +167,7 @@ async function createBackup(req, res) {
 
 async function createRecovery(req, res) {
   try {
+    res.set("Cache-Control", "no-store");
     const { backupJobId, targetEnv = "staging" } = req.body;
 
     const job = await adminService.createRecoveryJob({

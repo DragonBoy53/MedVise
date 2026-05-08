@@ -33,19 +33,54 @@ type BackupJob = {
   errorMessage: string | null;
 };
 
-const STATUS_META: Record<string, { color: string; bg: string; icon: keyof typeof Ionicons.glyphMap }> = {
+type RecoveryJob = {
+  id: number;
+  backupJobId: number;
+  initiatedBy: number | null;
+  initiatedByClerkUserId: string | null;
+  status: BackupStatus;
+  targetEnv: string;
+  confirmedAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  errorMessage: string | null;
+};
+
+type BackupRuntime = {
+  apiReady: boolean;
+  workerReady: boolean;
+  queueConfigured: boolean;
+  storageConfigured: boolean;
+  missingApiEnv: string[];
+  missingWorkerEnv: string[];
+  backupBucket: string;
+  workerCommand: string;
+  note: string;
+};
+
+const STATUS_META: Record<
+  string,
+  { color: string; bg: string; icon: keyof typeof Ionicons.glyphMap }
+> = {
   queued: { color: "#B45309", bg: "#FFFBEB", icon: "time-outline" },
   processing: { color: "#2563EB", bg: "#EFF6FF", icon: "sync-outline" },
-  completed: { color: "#059669", bg: "#ECFDF5", icon: "checkmark-circle-outline" },
+  completed: {
+    color: "#059669",
+    bg: "#ECFDF5",
+    icon: "checkmark-circle-outline",
+  },
   failed: { color: "#DC2626", bg: "#FEF2F2", icon: "alert-circle-outline" },
 };
 
 function getStatusMeta(status: BackupStatus) {
-  return STATUS_META[String(status).toLowerCase()] || {
-    color: "#64748B",
-    bg: "#F1F5F9",
-    icon: "ellipse-outline" as const,
-  };
+  return (
+    STATUS_META[String(status).toLowerCase()] || {
+      color: "#64748B",
+      bg: "#F1F5F9",
+      icon: "ellipse-outline" as const,
+    }
+  );
 }
 
 function formatDate(value: string | null) {
@@ -79,6 +114,8 @@ export default function BackupScreen() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const router = useRouter();
   const [items, setItems] = useState<BackupJob[]>([]);
+  const [recoveries, setRecoveries] = useState<RecoveryJob[]>([]);
+  const [runtime, setRuntime] = useState<BackupRuntime | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [creatingBackup, setCreatingBackup] = useState(false);
@@ -96,6 +133,8 @@ export default function BackupScreen() {
 
     return {
       Authorization: `Bearer ${token}`,
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
     };
   }, [getToken, isLoaded, isSignedIn]);
 
@@ -103,7 +142,7 @@ export default function BackupScreen() {
     const status = error?.response?.status;
 
     if (status === 401) {
-      return "Request was rejected by the admin API. Add CLERK_SECRET_KEY to the backend environment variables.";
+      return "Your admin session was rejected. Sign in again; if this keeps happening, verify CLERK_SECRET_KEY is set in the backend environment.";
     }
 
     if (status === 403) {
@@ -123,8 +162,13 @@ export default function BackupScreen() {
         }
 
         const headers = await getAuthHeaders();
-        const response = await apiClient.get("/api/admin/backups", { headers });
+        const response = await apiClient.get("/api/admin/backups", {
+          headers,
+          params: { _: Date.now() },
+        });
         setItems(response.data?.items || []);
+        setRecoveries(response.data?.recoveries || []);
+        setRuntime(response.data?.runtime || null);
       } catch (error: any) {
         Alert.alert(
           "Backups unavailable",
@@ -145,23 +189,45 @@ export default function BackupScreen() {
   );
 
   useEffect(() => {
-    const hasActiveJob = items.some((item) =>
-      ["queued", "processing"].includes(String(item.status).toLowerCase()),
-    );
+    const isActive = (status: BackupStatus) =>
+      ["queued", "processing"].includes(String(status).toLowerCase());
+    const hasActiveJob =
+      items.some((item) => isActive(item.status)) ||
+      recoveries.some((item) => isActive(item.status));
 
     if (!hasActiveJob) return;
 
     const timer = setInterval(() => {
       loadBackups(true);
-    }, 5000);
+    }, 15000);
 
     return () => clearInterval(timer);
-  }, [items, loadBackups]);
+  }, [items, recoveries, loadBackups]);
 
   const latestCompleted = useMemo(
     () => items.find((item) => item.status === "completed"),
     [items],
   );
+
+  const runtimeWarnings = useMemo(() => {
+    if (!runtime) return [];
+
+    const warnings: string[] = [];
+    if (runtime.missingApiEnv.length) {
+      warnings.push(`API missing: ${runtime.missingApiEnv.join(", ")}`);
+    }
+    if (runtime.missingWorkerEnv.length) {
+      warnings.push(`Worker missing: ${runtime.missingWorkerEnv.join(", ")}`);
+    }
+    if (!runtime.queueConfigured) {
+      warnings.push("Queue is offline until REDIS_URL is configured.");
+    }
+    if (!runtime.storageConfigured) {
+      warnings.push("Supabase backup storage is not configured.");
+    }
+
+    return warnings;
+  }, [runtime]);
 
   const createBackup = async () => {
     try {
@@ -225,6 +291,62 @@ export default function BackupScreen() {
     );
   };
 
+  const renderRuntimeStatus = () => {
+    if (!runtime || runtimeWarnings.length === 0) return null;
+
+    return (
+      <View style={styles.runtimePanel}>
+        <View style={styles.runtimeHeader}>
+          <Ionicons name="construct-outline" size={18} color="#B45309" />
+          <Text style={styles.runtimeTitle}>Backup Environment Needs Setup</Text>
+        </View>
+        {runtimeWarnings.map((warning) => (
+          <Text key={warning} style={styles.runtimeText}>
+            {warning}
+          </Text>
+        ))}
+        <Text style={styles.runtimeHint}>{runtime.note}</Text>
+      </View>
+    );
+  };
+
+  const renderRecoveries = () => {
+    if (!recoveries.length) return null;
+
+    return (
+      <View style={styles.recoverySection}>
+        <Text style={styles.sectionTitle}>Recovery Jobs</Text>
+        {recoveries.slice(0, 4).map((job) => {
+          const meta = getStatusMeta(job.status);
+
+          return (
+            <View key={job.id} style={styles.recoveryCard}>
+              <View style={styles.recoveryTop}>
+                <View style={styles.recoveryTitleWrap}>
+                  <Text style={styles.recoveryTitle}>Recovery #{job.id}</Text>
+                  <Text style={styles.recoverySubtitle}>
+                    Backup #{job.backupJobId} to {job.targetEnv}
+                  </Text>
+                </View>
+                <View style={[styles.statusPill, { backgroundColor: meta.bg }]}>
+                  <Text style={[styles.statusText, { color: meta.color }]}>
+                    {String(job.status).toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.recoveryDate}>
+                Queued {formatDate(job.createdAt)}
+              </Text>
+              {job.errorMessage ? (
+                <Text style={styles.recoveryError}>{job.errorMessage}</Text>
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
+
   const renderBackup = ({ item }: { item: BackupJob }) => {
     const meta = getStatusMeta(item.status);
     const isCompleted = String(item.status).toLowerCase() === "completed";
@@ -238,7 +360,9 @@ export default function BackupScreen() {
           </View>
           <View style={styles.cardBody}>
             <Text style={styles.cardTitle}>Backup #{item.id}</Text>
-            <Text style={styles.cardSubtitle}>{formatDate(item.createdAt)}</Text>
+            <Text style={styles.cardSubtitle}>
+              {formatDate(item.createdAt)}
+            </Text>
           </View>
           <View style={[styles.statusPill, { backgroundColor: meta.bg }]}>
             <Text style={[styles.statusText, { color: meta.color }]}>
@@ -254,7 +378,9 @@ export default function BackupScreen() {
           </View>
           <View style={styles.detailBlock}>
             <Text style={styles.detailLabel}>Completed</Text>
-            <Text style={styles.detailValue}>{formatDate(item.completedAt)}</Text>
+            <Text style={styles.detailValue}>
+              {formatDate(item.completedAt)}
+            </Text>
           </View>
         </View>
 
@@ -302,13 +428,16 @@ export default function BackupScreen() {
         <View style={styles.heroText}>
           <Text style={styles.heroTitle}>Database Backups</Text>
           <Text style={styles.heroSubtitle}>
-            Backups run in a Redis worker and are stored as Supabase Storage artifacts.
+            Backups run in a Redis worker and are stored as Supabase Storage
+            artifacts.
           </Text>
         </View>
         {latestCompleted ? (
           <View style={styles.latestBadge}>
             <Text style={styles.latestLabel}>Latest</Text>
-            <Text style={styles.latestValue}>{formatDate(latestCompleted.completedAt)}</Text>
+            <Text style={styles.latestValue}>
+              {formatDate(latestCompleted.completedAt)}
+            </Text>
           </View>
         ) : null}
       </View>
@@ -328,6 +457,9 @@ export default function BackupScreen() {
           </>
         )}
       </TouchableOpacity>
+
+      {renderRuntimeStatus()}
+      {renderRecoveries()}
 
       {loading ? (
         <View style={styles.loadingWrap}>
@@ -390,7 +522,12 @@ const styles = StyleSheet.create({
   },
   heroText: { flex: 1 },
   heroTitle: { fontSize: 22, fontWeight: "800", color: "#111827" },
-  heroSubtitle: { fontSize: 13, lineHeight: 19, color: "#64748B", marginTop: 4 },
+  heroSubtitle: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#64748B",
+    marginTop: 4,
+  },
   latestBadge: {
     borderRadius: 14,
     backgroundColor: "#ECFDF5",
@@ -412,6 +549,58 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   createButtonText: { color: "#fff", fontSize: 15, fontWeight: "800" },
+  runtimePanel: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    backgroundColor: "#FFFBEB",
+    padding: 12,
+  },
+  runtimeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    marginBottom: 6,
+  },
+  runtimeTitle: { fontSize: 13, fontWeight: "800", color: "#92400E" },
+  runtimeText: { fontSize: 12, lineHeight: 18, color: "#92400E" },
+  runtimeHint: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#A16207",
+    marginTop: 6,
+  },
+  recoverySection: { marginHorizontal: 16, marginBottom: 12, gap: 8 },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#334155",
+    marginBottom: 2,
+  },
+  recoveryCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E9EDF4",
+    backgroundColor: "#fff",
+    padding: 12,
+  },
+  recoveryTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  recoveryTitleWrap: { flex: 1 },
+  recoveryTitle: { fontSize: 14, fontWeight: "800", color: "#111827" },
+  recoverySubtitle: { fontSize: 12, color: "#64748B", marginTop: 3 },
+  recoveryDate: { fontSize: 12, color: "#8A94A6", marginTop: 8 },
+  recoveryError: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#B91C1C",
+    marginTop: 7,
+  },
   loadingWrap: { flex: 1, alignItems: "center", justifyContent: "center" },
   listContent: { padding: 16, gap: 12, paddingBottom: 36 },
   card: {

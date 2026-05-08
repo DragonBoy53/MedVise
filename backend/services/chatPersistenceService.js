@@ -8,6 +8,10 @@ function isSchemaError(error) {
   return error?.code === "42P01" || error?.code === "42703";
 }
 
+function isMissingColumnError(error) {
+  return error?.code === "42703";
+}
+
 function summarizeInteraction({ userMessage, assistantMessage, prediction, hadImage }) {
   const lines = [];
 
@@ -93,33 +97,59 @@ async function persistChatInteraction({
     }
 
     if (activeChatSessionId && (userMessage || hadImage)) {
-      await client.query(
-        `
-          INSERT INTO chat_messages (
-            chat_session_id,
-            sender_role,
-            content_redacted,
-            attachment_type,
-            attachment_bucket,
-            attachment_path,
-            attachment_mime_type,
-            attachment_size_bytes,
-            attachment_original_name,
-            created_at
-          )
-          VALUES ($1, 'user', $2, $3, $4, $5, $6, $7, $8, NOW())
-        `,
-        [
-          activeChatSessionId,
-          userMessage || (hadImage ? "Image uploaded for model analysis." : null),
-          imageAttachment?.attachmentType || null,
-          imageAttachment?.bucket || null,
-          imageAttachment?.path || null,
-          imageAttachment?.mimeType || null,
-          imageAttachment?.sizeBytes || null,
-          imageAttachment?.originalName || null,
-        ],
-      );
+      await client.query("SAVEPOINT user_message_insert");
+      try {
+        await client.query(
+          `
+            INSERT INTO chat_messages (
+              chat_session_id,
+              sender_role,
+              content_redacted,
+              attachment_type,
+              attachment_bucket,
+              attachment_path,
+              attachment_mime_type,
+              attachment_size_bytes,
+              attachment_original_name,
+              created_at
+            )
+            VALUES ($1, 'user', $2, $3, $4, $5, $6, $7, $8, NOW())
+          `,
+          [
+            activeChatSessionId,
+            userMessage || (hadImage ? "Image uploaded for model analysis." : null),
+            imageAttachment?.attachmentType || null,
+            imageAttachment?.bucket || null,
+            imageAttachment?.path || null,
+            imageAttachment?.mimeType || null,
+            imageAttachment?.sizeBytes || null,
+            imageAttachment?.originalName || null,
+          ],
+        );
+        await client.query("RELEASE SAVEPOINT user_message_insert");
+      } catch (error) {
+        if (!isMissingColumnError(error)) {
+          throw error;
+        }
+
+        await client.query("ROLLBACK TO SAVEPOINT user_message_insert");
+        await client.query(
+          `
+            INSERT INTO chat_messages (
+              chat_session_id,
+              sender_role,
+              content_redacted,
+              created_at
+            )
+            VALUES ($1, 'user', $2, NOW())
+          `,
+          [
+            activeChatSessionId,
+            userMessage || (hadImage ? "Image uploaded for model analysis." : null),
+          ],
+        );
+        await client.query("RELEASE SAVEPOINT user_message_insert");
+      }
     }
 
     if (activeChatSessionId && assistantMessage) {
@@ -260,25 +290,52 @@ async function getChatSessionForUser({ clerkUserId, chatSessionId }) {
       throw error;
     }
 
-    const messagesResult = await pool.query(
-      `
-        SELECT
-          id,
-          sender_role AS "senderRole",
-          content_redacted AS "content",
-          attachment_type AS "attachmentType",
-          attachment_bucket AS "attachmentBucket",
-          attachment_path AS "attachmentPath",
-          attachment_mime_type AS "attachmentMimeType",
-          attachment_size_bytes AS "attachmentSizeBytes",
-          attachment_original_name AS "attachmentOriginalName",
-          created_at AS "createdAt"
-        FROM chat_messages
-        WHERE chat_session_id = $1
-        ORDER BY created_at ASC, id ASC
-      `,
-      [chatSessionId],
-    );
+    let messagesResult;
+    try {
+      messagesResult = await pool.query(
+        `
+          SELECT
+            id,
+            sender_role AS "senderRole",
+            content_redacted AS "content",
+            attachment_type AS "attachmentType",
+            attachment_bucket AS "attachmentBucket",
+            attachment_path AS "attachmentPath",
+            attachment_mime_type AS "attachmentMimeType",
+            attachment_size_bytes AS "attachmentSizeBytes",
+            attachment_original_name AS "attachmentOriginalName",
+            created_at AS "createdAt"
+          FROM chat_messages
+          WHERE chat_session_id = $1
+          ORDER BY created_at ASC, id ASC
+        `,
+        [chatSessionId],
+      );
+    } catch (error) {
+      if (!isMissingColumnError(error)) {
+        throw error;
+      }
+
+      messagesResult = await pool.query(
+        `
+          SELECT
+            id,
+            sender_role AS "senderRole",
+            content_redacted AS "content",
+            NULL AS "attachmentType",
+            NULL AS "attachmentBucket",
+            NULL AS "attachmentPath",
+            NULL AS "attachmentMimeType",
+            NULL AS "attachmentSizeBytes",
+            NULL AS "attachmentOriginalName",
+            created_at AS "createdAt"
+          FROM chat_messages
+          WHERE chat_session_id = $1
+          ORDER BY created_at ASC, id ASC
+        `,
+        [chatSessionId],
+      );
+    }
 
     const messages = await Promise.all(
       messagesResult.rows.map(async (message) => {

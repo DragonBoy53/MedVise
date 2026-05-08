@@ -6,9 +6,40 @@ const {
 } = require("../utils/metricsCalculator");
 const { enqueueDbTask } = require("../queues/dbTasksQueue");
 const VALID_SPECIALTIES = ["cardiology", "diabetes", "thyroid"];
+const BACKUP_API_ENV_KEYS = [
+  "DATABASE_URL",
+  "REDIS_URL",
+  "SUPABASE_URL",
+  "SUPABASE_SERVICE_ROLE_KEY",
+];
+const BACKUP_WORKER_ENV_KEYS = [...BACKUP_API_ENV_KEYS];
 
 function isUndefinedTableError(error) {
   return error?.code === "42P01";
+}
+
+function getMissingEnv(keys) {
+  return keys.filter((key) => !process.env[key]);
+}
+
+function getBackupRuntimeStatus() {
+  const missingApiEnv = getMissingEnv(BACKUP_API_ENV_KEYS);
+  const missingWorkerEnv = getMissingEnv(BACKUP_WORKER_ENV_KEYS);
+
+  return {
+    apiReady: missingApiEnv.length === 0,
+    workerReady: missingWorkerEnv.length === 0,
+    queueConfigured: Boolean(process.env.REDIS_URL),
+    storageConfigured: Boolean(
+      process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY,
+    ),
+    missingApiEnv,
+    missingWorkerEnv,
+    backupBucket: process.env.SUPABASE_BACKUP_BUCKET || "database-backups",
+    workerCommand: "npm run worker:db",
+    note:
+      "Backups and recovery are executed by the database worker, which must run outside Vercel serverless with PostgreSQL client tools available.",
+  };
 }
 
 function normalizeSpecialty(input) {
@@ -528,6 +559,35 @@ async function listBackupJobs() {
   }
 }
 
+async function listRecoveryJobs() {
+  try {
+    const result = await pool.query(`
+      SELECT
+        id,
+        backup_job_id AS "backupJobId",
+        initiated_by AS "initiatedBy",
+        initiated_by_clerk_user_id AS "initiatedByClerkUserId",
+        status,
+        target_env AS "targetEnv",
+        confirmed_at AS "confirmedAt",
+        started_at AS "startedAt",
+        completed_at AS "completedAt",
+        created_at AS "createdAt",
+        error_message AS "errorMessage"
+      FROM recovery_jobs
+      ORDER BY created_at DESC
+      LIMIT 10
+    `);
+
+    return result.rows;
+  } catch (error) {
+    if (isUndefinedTableError(error)) {
+      error.code = "SCHEMA_NOT_READY";
+    }
+    throw error;
+  }
+}
+
 async function createBackupJob({ initiatedBy = null, initiatedByClerkUserId = null }) {
   try {
     const result = await pool.query(
@@ -851,6 +911,8 @@ module.exports = {
   getMetricsOverview,
   generateAndSaveMetricsSnapshot,
   listBackupJobs,
+  listRecoveryJobs,
+  getBackupRuntimeStatus,
   createBackupJob,
   createRecoveryJob,
   listChatLogs,
