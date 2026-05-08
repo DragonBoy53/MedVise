@@ -31,18 +31,18 @@ async function getDatabaseJobStatus() {
           COALESCE(SUM(CASE WHEN status = 'failed' THEN count ELSE 0 END), 0)::int AS failed
         FROM (
           SELECT status, COUNT(*)::int AS count
-          FROM backup_jobs
+          FROM public.backup_jobs
           GROUP BY status
           UNION ALL
           SELECT status, COUNT(*)::int AS count
-          FROM recovery_jobs
+          FROM public.recovery_jobs
           GROUP BY status
         ) job_counts
       `),
       pool.query(
         `
           SELECT last_seen_at AS "lastSeenAt", metadata_json AS "metadata"
-          FROM worker_heartbeats
+          FROM public.worker_heartbeats
           WHERE heartbeat_key = 'db-worker'
           LIMIT 1
         `,
@@ -601,7 +601,7 @@ async function listBackupJobs() {
         completed_at AS "completedAt",
         created_at AS "createdAt",
         error_message AS "errorMessage"
-      FROM backup_jobs
+      FROM public.backup_jobs
       ORDER BY created_at DESC
       LIMIT 20
     `);
@@ -630,7 +630,7 @@ async function listRecoveryJobs() {
         completed_at AS "completedAt",
         created_at AS "createdAt",
         error_message AS "errorMessage"
-      FROM recovery_jobs
+      FROM public.recovery_jobs
       ORDER BY created_at DESC
       LIMIT 10
     `);
@@ -648,7 +648,7 @@ async function createBackupJob({ initiatedBy = null, initiatedByClerkUserId = nu
   try {
     const result = await pool.query(
       `
-        INSERT INTO backup_jobs (initiated_by, initiated_by_clerk_user_id, status)
+        INSERT INTO public.backup_jobs (initiated_by, initiated_by_clerk_user_id, status)
         VALUES ($1, $2, 'queued')
         RETURNING
           id,
@@ -683,7 +683,7 @@ async function createRecoveryJob({
     if (!effectiveBackupJobId) {
       const latestBackupResult = await pool.query(`
         SELECT id
-        FROM backup_jobs
+        FROM public.backup_jobs
         ORDER BY created_at DESC
         LIMIT 1
       `);
@@ -700,7 +700,7 @@ async function createRecoveryJob({
     const backupResult = await pool.query(
       `
         SELECT id, status, storage_uri
-        FROM backup_jobs
+        FROM public.backup_jobs
         WHERE id = $1
         LIMIT 1
       `,
@@ -724,7 +724,7 @@ async function createRecoveryJob({
 
     const result = await pool.query(
       `
-        INSERT INTO recovery_jobs (
+        INSERT INTO public.recovery_jobs (
           backup_job_id,
           initiated_by,
           initiated_by_clerk_user_id,

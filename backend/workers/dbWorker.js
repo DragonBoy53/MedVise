@@ -77,7 +77,7 @@ async function updateWorkerHeartbeat() {
   try {
     await pool.query(
       `
-        INSERT INTO worker_heartbeats (heartbeat_key, last_seen_at, metadata_json)
+        INSERT INTO public.worker_heartbeats (heartbeat_key, last_seen_at, metadata_json)
         VALUES ('db-worker', NOW(), $1::jsonb)
         ON CONFLICT (heartbeat_key)
         DO UPDATE SET
@@ -107,7 +107,7 @@ async function updateWorkerHeartbeat() {
 async function updateBackupFailure(backupJobId, error) {
   await pool.query(
     `
-      UPDATE backup_jobs
+      UPDATE public.backup_jobs
       SET status = 'failed',
           completed_at = NOW(),
           error_message = $2
@@ -120,7 +120,7 @@ async function updateBackupFailure(backupJobId, error) {
 async function updateRecoveryFailure(recoveryJobId, error) {
   await pool.query(
     `
-      UPDATE recovery_jobs
+      UPDATE public.recovery_jobs
       SET status = 'failed',
           completed_at = NOW(),
           error_message = $2
@@ -133,7 +133,7 @@ async function updateRecoveryFailure(recoveryJobId, error) {
 async function markRecoveryCompleted({ recoveryJobId, backupJobId, targetEnv }) {
   await pool.query(
     `
-      INSERT INTO recovery_jobs (
+      INSERT INTO public.recovery_jobs (
         id,
         backup_job_id,
         status,
@@ -155,13 +155,13 @@ async function markRecoveryCompleted({ recoveryJobId, backupJobId, targetEnv }) 
 
 async function claimNextBackupJob() {
   const result = await pool.query(`
-    UPDATE backup_jobs
+    UPDATE public.backup_jobs
     SET status = 'processing',
         started_at = NOW(),
         error_message = NULL
     WHERE id = (
       SELECT id
-      FROM backup_jobs
+      FROM public.backup_jobs
       WHERE status = 'queued'
       ORDER BY created_at ASC
       FOR UPDATE SKIP LOCKED
@@ -178,13 +178,13 @@ async function claimNextRecoveryJob() {
 
   try {
     result = await pool.query(`
-      UPDATE recovery_jobs
+      UPDATE public.recovery_jobs
       SET status = 'processing',
           started_at = NOW(),
           error_message = NULL
       WHERE id = (
         SELECT id
-        FROM recovery_jobs
+        FROM public.recovery_jobs
         WHERE status = 'queued'
         ORDER BY created_at ASC
         FOR UPDATE SKIP LOCKED
@@ -198,12 +198,12 @@ async function claimNextRecoveryJob() {
     }
 
     result = await pool.query(`
-      UPDATE recovery_jobs
+      UPDATE public.recovery_jobs
       SET status = 'processing',
           error_message = NULL
       WHERE id = (
         SELECT id
-        FROM recovery_jobs
+        FROM public.recovery_jobs
         WHERE status = 'queued'
         ORDER BY created_at ASC
         FOR UPDATE SKIP LOCKED
@@ -248,7 +248,7 @@ async function handleBackup(backupJobId) {
 
     await pool.query(
       `
-        UPDATE backup_jobs
+        UPDATE public.backup_jobs
         SET status = 'completed',
             storage_uri = $2,
             checksum = $3,
@@ -287,7 +287,7 @@ async function handleRestore({ recoveryJobId, backupJobId, targetEnv }) {
     const backupResult = await pool.query(
       `
         SELECT storage_uri AS "storageUri"
-        FROM backup_jobs
+        FROM public.backup_jobs
         WHERE id = $1
           AND status = 'completed'
           AND storage_uri IS NOT NULL
