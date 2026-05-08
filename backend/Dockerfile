@@ -11,4 +11,4 @@ RUN npm ci --omit=dev
 
 COPY . .
 
-CMD ["npm", "run", "worker:db"]
+CMD ["sh", "-lc", "pg_dump --version && node workers/dbWorker.js"]

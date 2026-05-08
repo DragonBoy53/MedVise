@@ -212,8 +212,11 @@ export default function BackupScreen() {
     if (initialLoadDoneRef.current) return;
 
     initialLoadDoneRef.current = true;
-    loadBackups();
-  }, [isLoaded, isSignedIn, loadBackups]);
+    void loadBackups();
+    // Intentionally do not depend on loadBackups here; auth libraries can
+    // recreate callbacks and cause repeated fetches while the screen is open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded, isSignedIn]);
 
   const latestCompleted = useMemo(
     () => items.find((item) => item.status === "completed"),
