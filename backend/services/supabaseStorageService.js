@@ -2,7 +2,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const fsp = require("fs/promises");
 const path = require("path");
-const axios = require("axios");
+const { Readable } = require("stream");
 
 const DEFAULT_CHAT_IMAGES_BUCKET = "chat-images";
 const DEFAULT_BACKUP_BUCKET = "database-backups";
@@ -44,6 +44,31 @@ function storageHeaders(extraHeaders = {}) {
     Authorization: `Bearer ${serviceKey}`,
     ...extraHeaders,
   };
+}
+
+async function parseStorageResponse(response) {
+  const text = await response.text();
+  if (!text) return {};
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: text };
+  }
+}
+
+async function assertStorageResponse(response, action) {
+  if (response.ok) {
+    return parseStorageResponse(response);
+  }
+
+  const details = await parseStorageResponse(response);
+  const error = new Error(
+    details?.message || `${action} failed with status ${response.status}`,
+  );
+  error.status = response.status;
+  error.response = details;
+  throw error;
 }
 
 function encodeStoragePath(value) {
@@ -124,52 +149,52 @@ async function uploadFileToBucket({
 
   const url = `${supabaseUrl}/storage/v1/object/${encodeURIComponent(bucket)}/${encodeStoragePath(objectPath)}`;
 
-  const response = await axios.post(url, fs.createReadStream(filePath), {
+  const response = await fetch(url, {
+    method: "POST",
     headers: storageHeaders({
       "Content-Type": contentType,
       "cache-control": cacheControl,
       "x-upsert": "false",
     }),
-    maxBodyLength: Infinity,
-    maxContentLength: Infinity,
+    body: fs.createReadStream(filePath),
+    duplex: "half",
   });
 
-  return response.data;
+  return assertStorageResponse(response, "Supabase Storage upload");
 }
 
 async function ensureBucket(bucket) {
   const { supabaseUrl } = requireSupabaseStorageConfig();
   const bucketUrl = `${supabaseUrl}/storage/v1/bucket/${encodeURIComponent(bucket)}`;
 
-  try {
-    await axios.get(bucketUrl, {
-      headers: storageHeaders(),
-    });
+  const existingBucket = await fetch(bucketUrl, {
+    headers: storageHeaders(),
+  });
+
+  if (existingBucket.ok) {
     return;
-  } catch (error) {
-    if (error?.response?.status !== 404) {
-      throw error;
-    }
   }
 
-  try {
-    await axios.post(
-      `${supabaseUrl}/storage/v1/bucket`,
-      {
-        name: bucket,
-        public: false,
-      },
-      {
-        headers: storageHeaders({
-          "Content-Type": "application/json",
-        }),
-      },
-    );
-  } catch (error) {
-    if (error?.response?.status !== 409) {
-      throw error;
-    }
+  if (existingBucket.status !== 404) {
+    await assertStorageResponse(existingBucket, "Supabase Storage bucket lookup");
   }
+
+  const createdBucket = await fetch(`${supabaseUrl}/storage/v1/bucket`, {
+    method: "POST",
+    headers: storageHeaders({
+      "Content-Type": "application/json",
+    }),
+    body: JSON.stringify({
+      name: bucket,
+      public: false,
+    }),
+  });
+
+  if (createdBucket.ok || createdBucket.status === 409) {
+    return;
+  }
+
+  await assertStorageResponse(createdBucket, "Supabase Storage bucket creation");
 }
 
 async function uploadChatImage({ file, clerkUserId }) {
@@ -206,17 +231,16 @@ async function createSignedUrl({ bucket, objectPath, expiresIn = 3600 }) {
 
   const { supabaseUrl } = requireSupabaseStorageConfig();
   const url = `${supabaseUrl}/storage/v1/object/sign/${encodeURIComponent(bucket)}/${encodeStoragePath(objectPath)}`;
-  const response = await axios.post(
-    url,
-    { expiresIn },
-    {
-      headers: storageHeaders({
-        "Content-Type": "application/json",
-      }),
-    },
-  );
+  const response = await fetch(url, {
+    method: "POST",
+    headers: storageHeaders({
+      "Content-Type": "application/json",
+    }),
+    body: JSON.stringify({ expiresIn }),
+  });
 
-  const signedURL = response.data?.signedURL || response.data?.signedUrl || null;
+  const data = await assertStorageResponse(response, "Supabase signed URL creation");
+  const signedURL = data?.signedURL || data?.signedUrl || null;
   if (!signedURL) return null;
   if (/^https?:\/\//i.test(signedURL)) return signedURL;
 
@@ -249,17 +273,19 @@ async function downloadStorageUriToFile(storageUri, filePath) {
   const { supabaseUrl } = requireSupabaseStorageConfig();
   const url = `${supabaseUrl}/storage/v1/object/${encodeURIComponent(bucket)}/${encodeStoragePath(objectPath)}`;
 
-  const response = await axios.get(url, {
+  const response = await fetch(url, {
     headers: storageHeaders(),
-    responseType: "stream",
-    maxBodyLength: Infinity,
-    maxContentLength: Infinity,
   });
+
+  if (!response.ok) {
+    await assertStorageResponse(response, "Supabase Storage download");
+  }
 
   await new Promise((resolve, reject) => {
     const writable = fs.createWriteStream(filePath);
-    response.data.pipe(writable);
-    response.data.on("error", reject);
+    const readable = Readable.fromWeb(response.body);
+    readable.pipe(writable);
+    readable.on("error", reject);
     writable.on("error", reject);
     writable.on("finish", resolve);
   });

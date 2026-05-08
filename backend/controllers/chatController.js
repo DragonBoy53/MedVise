@@ -1,5 +1,4 @@
 const fs = require("fs");
-const axios = require("axios");
 const { ai, SYSTEM_INSTRUCTION, tools } = require("../services/chatService");
 const {
   createPredictionEvent,
@@ -18,22 +17,56 @@ const {
 const MODEL_NAME = process.env.MODEL_NAME;
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL;
 
+async function postJsonWithTimeout(url, payload, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    const responseText = await response.text();
+    let parsed;
+    try {
+      parsed = responseText ? JSON.parse(responseText) : {};
+    } catch {
+      parsed = { message: responseText };
+    }
+
+    if (!response.ok) {
+      const error = new Error(
+        parsed?.message || `Request failed with status ${response.status}`,
+      );
+      error.status = response.status;
+      error.response = parsed;
+      throw error;
+    }
+
+    return parsed;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function runCardiologyModel(features) {
   if (!ML_SERVICE_URL) return { error: "ML_SERVICE_URL not configured." };
-  const res = await axios.post(`${ML_SERVICE_URL}/predict/cardiology`, features, { timeout: 15000 });
-  return res.data;
+  return postJsonWithTimeout(`${ML_SERVICE_URL}/predict/cardiology`, features);
 }
 
 async function runDiabetesModel(features) {
   if (!ML_SERVICE_URL) return { error: "ML_SERVICE_URL not configured." };
-  const res = await axios.post(`${ML_SERVICE_URL}/predict/diabetes`, features, { timeout: 15000 });
-  return res.data;
+  return postJsonWithTimeout(`${ML_SERVICE_URL}/predict/diabetes`, features);
 }
 
 async function runThyroidModel(features) {
   if (!ML_SERVICE_URL) return { error: "ML_SERVICE_URL not configured." };
-  const res = await axios.post(`${ML_SERVICE_URL}/predict/thyroid`, features, { timeout: 15000 });
-  return res.data;
+  return postJsonWithTimeout(`${ML_SERVICE_URL}/predict/thyroid`, features);
 }
 
 async function dispatchTool(name, args) {
