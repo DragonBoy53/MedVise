@@ -1,0 +1,27 @@
+services:
+  - type: worker
+    name: med-vise-db-worker
+    runtime: docker
+    plan: starter
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile.worker
+    dockerCommand: npm run worker:db
+    maxShutdownDelaySeconds: 300
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_BACKUP_BUCKET
+        value: database-backups
+      - key: SUPABASE_BACKUP_PREFIX
+        value: medvise/backups
+      - key: SUPABASE_CHAT_IMAGES_BUCKET
+        value: chat-images
+      - key: DB_WORKER_POLL_INTERVAL_MS
+        value: "15000"
