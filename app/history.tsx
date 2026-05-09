@@ -1,8 +1,7 @@
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -136,11 +135,9 @@ export default function HistoryScreen() {
     [getToken],
   );
 
-  useFocusEffect(
-    useCallback(() => {
-      loadHistory();
-    }, [loadHistory]),
-  );
+  useEffect(() => {
+  loadHistory();
+}, []);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
