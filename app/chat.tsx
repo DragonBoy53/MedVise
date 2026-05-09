@@ -1,3 +1,4 @@
+import { getAppRole } from "@/utils/auth";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { FontAwesome5, Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -26,7 +27,6 @@ import Markdown from "react-native-markdown-display";
 import { SafeAreaView } from "react-native-safe-area-context";
 import apiClient from "../api/client";
 import HospitalRecommendationPopup from "../components/HospitalRecommendationPopup";
-import { getAppRole } from "@/utils/auth";
 
 type Message = {
   id: string;
@@ -531,11 +531,7 @@ export default function ChatScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.iconBtn} disabled={isSending}>
-                <Ionicons
-                  name="mic-outline"
-                  size={22}
-                  color={isSending ? "#B6BEC9" : "#444"}
-                />
+               
               </TouchableOpacity>
             </View>
             {isSending ? (

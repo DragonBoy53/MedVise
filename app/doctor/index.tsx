@@ -100,14 +100,11 @@ export default function DoctorDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [patientsError, setPatientsError] = useState<string | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const [patientDetail, setPatientDetail] = useState<PatientDetail | null>(
-    null,
-  );
+  const [patientDetail, setPatientDetail] = useState<PatientDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
-  const clinicianName =
-    user?.fullName || user?.primaryEmailAddress?.emailAddress || "Clinician";
+  const clinicianName = user?.fullName || user?.primaryEmailAddress?.emailAddress || "Clinician";
   const clinicianEmail = user?.primaryEmailAddress?.emailAddress || "";
   const clinicianCode = getClinicianCode(user);
 
@@ -123,7 +120,7 @@ export default function DoctorDashboard() {
           onPress: () => signOut(),
         },
       ],
-      { cancelable: true },
+      { cancelable: true }
     );
   };
 
@@ -140,9 +137,7 @@ export default function DoctorDashboard() {
       setPatients(response.data?.items || []);
     } catch (error: any) {
       setPatientsError(
-        error?.response?.data?.message ||
-          error?.message ||
-          "Could not load linked patients.",
+        error?.response?.data?.message || error?.message || "Could not load linked patients."
       );
     } finally {
       setLoadingPatients(false);
@@ -169,14 +164,12 @@ export default function DoctorDashboard() {
       const headers = await getAuthHeaders();
       const response = await apiClient.get(
         `/api/doctor/patients/${encodeURIComponent(patient.patientUserId)}/summary`,
-        { headers },
+        { headers }
       );
       setPatientDetail(response.data?.item || null);
     } catch (error: any) {
       setDetailError(
-        error?.response?.data?.message ||
-          error?.message ||
-          "Could not load patient clinical summary.",
+        error?.response?.data?.message || error?.message || "Could not load patient clinical summary."
       );
     } finally {
       setLoadingDetail(false);
@@ -201,8 +194,7 @@ export default function DoctorDashboard() {
       <View style={styles.patientBody}>
         <Text style={styles.patientName}>{item.displayName}</Text>
         <Text style={styles.patientMeta} numberOfLines={1}>
-          Linked {formatDate(item.linkedAt)} • {item.predictionCount} risk
-          scores
+          Linked {formatDate(item.linkedAt)} • {item.predictionCount} risk scores
         </Text>
         <Text style={styles.patientSubtle}>
           Last activity: {formatDate(item.lastPredictionAt)}
@@ -213,26 +205,35 @@ export default function DoctorDashboard() {
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
+      {/* FIXED HEADER LOGIC */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.eyebrow}>Clinician Portal</Text>
-          <Text style={styles.title}>Patient Review</Text>
-        </View>
-        <View style={styles.headerRight}>
-          <View style={styles.headerBadge}>
-            <Ionicons name="shield-checkmark-outline" size={16} color="#0F766E" />
-            <Text style={styles.headerBadgeText}>{clinicianName}</Text>
+        <View style={styles.headerContent}>
+          {/* Left Section */}
+          <View style={styles.headerLeft}>
+            <Text style={styles.eyebrow}>Clinician Portal</Text>
+            <Text style={styles.title} numberOfLines={1}>Patient Review</Text>
           </View>
-          <TouchableOpacity
-            style={styles.signOutButton}
-            onPress={handleSignOut}
-            accessibilityLabel="Sign out"
-          >
-            <Ionicons name="log-out-outline" size={20} color="#C62828" />
-          </TouchableOpacity>
+
+          {/* Right Section */}
+          <View style={styles.headerRight}>
+            <View style={styles.headerBadge}>
+              <Ionicons name="shield-checkmark" size={14} color="#0F766E" />
+              <Text style={styles.headerBadgeText} numberOfLines={1}>
+                {clinicianName}
+              </Text>
+            </View>
+            
+            <TouchableOpacity
+              style={styles.signOutButton}
+              onPress={handleSignOut}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="log-out-outline" size={20} color="#C62828" />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -283,13 +284,10 @@ export default function DoctorDashboard() {
             <View style={styles.emptyState}>
               <Ionicons name="people-outline" size={32} color="#94A3B8" />
               <Text style={styles.emptyTitle}>
-                {patientsError
-                  ? "Could not load patients"
-                  : "No shared patients"}
+                {patientsError ? "Could not load patients" : "No shared patients"}
               </Text>
               <Text style={styles.emptyText}>
-                {patientsError ||
-                  "Patients will appear here after they link your clinician account."}
+                {patientsError || "Patients will appear here after they link your clinician account."}
               </Text>
             </View>
           )
@@ -343,10 +341,7 @@ export default function DoctorDashboard() {
                       </Text>
                     </View>
                     {splitSummary(item.summary).map((line, index) => (
-                      <View
-                        key={`${item.id}-${index}`}
-                        style={styles.bulletRow}
-                      >
+                      <View key={`${item.id}-${index}`} style={styles.bulletRow}>
                         <View style={styles.bulletDot} />
                         <Text style={styles.bulletText}>{line}</Text>
                       </View>
@@ -365,17 +360,12 @@ export default function DoctorDashboard() {
                   <View key={item.id} style={styles.messageCard}>
                     <View style={styles.messageHeader}>
                       <Text style={styles.messageSender}>
-                        {item.senderRole === "assistant"
-                          ? "MedVise"
-                          : "Patient"}
+                        {item.senderRole === "assistant" ? "MedVise" : "Patient"}
                       </Text>
-                      <Text style={styles.panelDate}>
-                        {formatDate(item.createdAt)}
-                      </Text>
+                      <Text style={styles.panelDate}>{formatDate(item.createdAt)}</Text>
                     </View>
                     <Text style={styles.messageBody}>
-                      {item.content ||
-                        "No message body was saved for this turn."}
+                      {item.content || "No message body was saved for this turn."}
                     </Text>
                   </View>
                 ))
@@ -390,12 +380,8 @@ export default function DoctorDashboard() {
                 patientDetail.predictions.map((item) => (
                   <View key={item.id} style={styles.riskRow}>
                     <View>
-                      <Text style={styles.riskTitle}>
-                        {formatSpecialty(item.specialty)}
-                      </Text>
-                      <Text style={styles.riskDate}>
-                        {formatDate(item.createdAt)}
-                      </Text>
+                      <Text style={styles.riskTitle}>{formatSpecialty(item.specialty)}</Text>
+                      <Text style={styles.riskDate}>{formatDate(item.createdAt)}</Text>
                     </View>
                     <View
                       style={[
@@ -403,12 +389,7 @@ export default function DoctorDashboard() {
                         { backgroundColor: `${riskColor(item.riskLevel)}18` },
                       ]}
                     >
-                      <Text
-                        style={[
-                          styles.riskBadgeText,
-                          { color: riskColor(item.riskLevel) },
-                        ]}
-                      >
+                      <Text style={[styles.riskBadgeText, { color: riskColor(item.riskLevel) }]}>
                         {item.riskLevel}
                       </Text>
                     </View>
@@ -431,41 +412,36 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingTop: 8,
     paddingBottom: 16,
     backgroundColor: "#F8FAFC",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+  },
+  headerContent: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end", // Aligns bottom of title with bottom of badge
     justifyContent: "space-between",
-    gap: 14,
+  },
+  headerLeft: {
+    flex: 1,
   },
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    marginLeft: 12,
-    flexShrink: 0,
-  },
-  signOutButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FEF2F2",
-    borderWidth: 1,
-    borderColor: "#FECACA",
+    gap: 10,
+    marginBottom:1, // Fine-tuning to match the text baseline
   },
   eyebrow: {
     color: "#0F766E",
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 1,
   },
-  title: { color: "#0F172A", fontSize: 26, fontWeight: "800", marginTop: 3 },
+  title: { color: "#0F172A", fontSize: 24, fontWeight: "800", marginTop: 2 },
   headerBadge: {
-    maxWidth: 160,
+    maxWidth: 120,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -473,11 +449,22 @@ const styles = StyleSheet.create({
     borderColor: "#CCFBF1",
     borderWidth: 1,
     borderRadius: 999,
+    marginTop:10,
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 5,
   },
-  headerBadgeText: { color: "#0F766E", fontSize: 12, fontWeight: "700" },
-  listContent: { padding: 20, paddingTop: 4, gap: 12 },
+  headerBadgeText: { color: "#0F766E", fontSize: 12, fontWeight: "700", flexShrink: 1 },
+  signOutButton: {
+    width: 40,
+    height: 35,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  listContent: { padding: 20, paddingTop: 16, gap: 12 },
   headerStack: { gap: 12, marginBottom: 4 },
   summaryStrip: {
     backgroundColor: "#fff",
