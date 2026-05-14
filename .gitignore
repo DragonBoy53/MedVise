@@ -62,3 +62,4 @@ ios/
 node_modules/
 android/
 ios/
+.vercel

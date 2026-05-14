@@ -186,12 +186,12 @@ async function persistChatInteraction({
         `
           UPDATE chat_sessions
           SET
-            specialty = COALESCE(specialty, $2),
+            specialty = COALESCE(specialty, $2::text),
             summary = LEFT(
               CASE
-                WHEN summary IS NULL OR BTRIM(summary) = '' THEN $3
-                WHEN $3 IS NULL OR BTRIM($3) = '' THEN summary
-                ELSE summary || E'\n\n' || $3
+                WHEN summary IS NULL OR BTRIM(summary) = '' THEN $3::text
+                WHEN $3::text IS NULL OR BTRIM($3::text) = '' THEN summary
+                ELSE summary || E'\n\n' || $3::text
               END,
               4000
             ),
