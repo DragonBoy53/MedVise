@@ -21,10 +21,12 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.MedVise",
+      "package": "com.medvise",
       "permissions": [
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
@@ -46,6 +48,20 @@
         }
       ],
       "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "MedVise uses your photo library so you can upload medical images to your chat.",
+          "cameraPermission": "MedVise uses your camera so you can take medical images to upload to your chat.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "react-native-document-scanner-plugin",
+        {
+          "cameraPermission": "MedVise uses your camera so you can scan medical documents to upload to your chat."
+        }
+      ],
       "expo-location"
     ],
     "experiments": {
@@ -55,7 +71,7 @@
     "extra": {
       "clerkPublishableKey": "pk_test_YXNzdXJlZC1maWxseS0xNi5jbGVyay5hY2NvdW50cy5kZXYk",
       "eas": {
-        "projectId": "15a87f60-bdfa-4695-ae40-2f71ffc7657a"
+        "projectId": "e5e51d2a-2f85-4e27-bce4-f7eabd917fd1"
       }
     }
   }

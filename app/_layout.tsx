@@ -6,14 +6,20 @@ import {
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
+import Constants from "expo-constants";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import "react-native-reanimated";
+
+const clerkPublishableKey =
+  process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+  Constants.expoConfig?.extra?.clerkPublishableKey;
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
-    <ClerkProvider tokenCache={tokenCache}>
+    <ClerkProvider publishableKey={clerkPublishableKey} tokenCache={tokenCache}>
       <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" options={{ headerShown: false }} />

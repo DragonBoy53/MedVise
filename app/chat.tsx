@@ -352,6 +352,25 @@ export default function ChatScreen() {
     }
   };
 
+  const scanDocument = async () => {
+    try {
+      const { default: DocumentScanner } = await import(
+        "react-native-document-scanner-plugin"
+      );
+      const { scannedImages } = await DocumentScanner.scanDocument({
+        croppedImageQuality: 80,
+        maxNumDocuments: 1,
+      });
+
+      if (scannedImages?.length) {
+        setSelectedImage(scannedImages[0]);
+      }
+    } catch (error) {
+      console.log("Error scanning document:", error);
+      Alert.alert("Scanner Error", "Could not scan the document.");
+    }
+  };
+
   // ── Render helpers ────────────────────────────────────────────────────────
 
   const cancelActiveRequest = useCallback(() => {
@@ -609,6 +628,7 @@ export default function ChatScreen() {
               style={styles.attachOption}
               onPress={() => {
                 setShowAttachMenu(false);
+                setTimeout(() => scanDocument(), 300);
               }}
             >
               <View style={[styles.optionIcon, { backgroundColor: "#F3E5F5" }]}>
