@@ -46,6 +46,8 @@ type RecoveryJob = {
   errorMessage: string | null;
 };
 
+type BackupTab = "backups" | "recoveries";
+
 type BackupRuntime = {
   apiReady: boolean;
   workerReady: boolean;
@@ -135,6 +137,7 @@ export default function BackupScreen() {
   const [runtime, setRuntime] = useState<BackupRuntime | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<BackupTab>("backups");
   const [creatingBackup, setCreatingBackup] = useState(false);
   const [restoringId, setRestoringId] = useState<number | null>(null);
   const initialLoadDoneRef = useRef(false);
@@ -430,45 +433,58 @@ export default function BackupScreen() {
     );
   };
 
-  const renderRecoveries = () => {
-    if (!recoveries.length) return null;
+  const renderTabButton = (tab: BackupTab, label: string, count: number) => {
+    const isActive = activeTab === tab;
+    return (
+      <TouchableOpacity
+        style={[styles.tabButton, isActive && styles.tabButtonActive]}
+        activeOpacity={0.82}
+        onPress={() => setActiveTab(tab)}
+      >
+        <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
+          {label}
+        </Text>
+        <View style={[styles.tabCount, isActive && styles.tabCountActive]}>
+          <Text
+            style={[styles.tabCountText, isActive && styles.tabCountTextActive]}
+          >
+            {count}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderRecovery = ({ item }: { item: RecoveryJob }) => {
+    const meta = getStatusMeta(item.status);
 
     return (
-      <View style={styles.recoverySection}>
-        <Text style={styles.sectionTitle}>Recovery Jobs</Text>
-        {recoveries.slice(0, 4).map((job) => {
-          const meta = getStatusMeta(job.status);
-
-          return (
-            <View key={job.id} style={styles.recoveryCard}>
-              <View style={styles.recoveryTop}>
-                <View style={styles.recoveryTitleWrap}>
-                  <Text style={styles.recoveryTitle}>Recovery #{job.id}</Text>
-                  <Text style={styles.recoverySubtitle}>
-                    Backup #{job.backupJobId} to {job.targetEnv}
-                  </Text>
-                </View>
-                <View style={[styles.statusPill, { backgroundColor: meta.bg }]}>
-                  <Text style={[styles.statusText, { color: meta.color }]}>
-                    {String(job.status).toUpperCase()}
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.recoveryDate}>
-                Queued {formatDate(job.createdAt)}
-              </Text>
-              {String(job.status).toLowerCase() === "queued" ? (
-                <Text style={styles.recoveryNote}>
-                  Waiting for the database worker to download the selected dump
-                  and restore it.
-                </Text>
-              ) : null}
-              {job.errorMessage ? (
-                <Text style={styles.recoveryError}>{job.errorMessage}</Text>
-              ) : null}
-            </View>
-          );
-        })}
+      <View style={styles.recoveryCard}>
+        <View style={styles.recoveryTop}>
+          <View style={styles.recoveryTitleWrap}>
+            <Text style={styles.recoveryTitle}>Recovery #{item.id}</Text>
+            <Text style={styles.recoverySubtitle}>
+              Backup #{item.backupJobId} to {item.targetEnv}
+            </Text>
+          </View>
+          <View style={[styles.statusPill, { backgroundColor: meta.bg }]}>
+            <Text style={[styles.statusText, { color: meta.color }]}>
+              {String(item.status).toUpperCase()}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.recoveryDate}>
+          Queued {formatDate(item.createdAt)}
+        </Text>
+        {String(item.status).toLowerCase() === "queued" ? (
+          <Text style={styles.recoveryNote}>
+            Waiting for the database worker to download the selected dump and
+            restore it.
+          </Text>
+        ) : null}
+        {item.errorMessage ? (
+          <Text style={styles.recoveryError}>{item.errorMessage}</Text>
+        ) : null}
       </View>
     );
   };
@@ -588,30 +604,36 @@ export default function BackupScreen() {
         ) : null}
       </View>
 
-      <TouchableOpacity
-        style={styles.createButton}
-        activeOpacity={0.86}
-        onPress={confirmCreateBackup}
-        disabled={creatingBackup}
-      >
-        {creatingBackup ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <>
-            <Ionicons name="cloud-upload-outline" size={19} color="#fff" />
-            <Text style={styles.createButtonText}>Create New Backup</Text>
-          </>
-        )}
-      </TouchableOpacity>
-
       {renderRuntimeStatus()}
-      {renderRecoveries()}
+
+      <View style={styles.tabs}>
+        {renderTabButton("backups", "Backup Jobs", items.length)}
+        {renderTabButton("recoveries", "Recovery Jobs", recoveries.length)}
+      </View>
+
+      {activeTab === "backups" ? (
+        <TouchableOpacity
+          style={styles.createButton}
+          activeOpacity={0.86}
+          onPress={confirmCreateBackup}
+          disabled={creatingBackup}
+        >
+          {creatingBackup ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="cloud-upload-outline" size={19} color="#fff" />
+              <Text style={styles.createButtonText}>Create New Backup</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      ) : null}
 
       {loading ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color="#111827" />
         </View>
-      ) : (
+      ) : activeTab === "backups" ? (
         <FlatList
           data={items}
           keyExtractor={(item) => String(item.id)}
@@ -632,6 +654,32 @@ export default function BackupScreen() {
               <Text style={styles.emptyTitle}>No backups yet</Text>
               <Text style={styles.emptySubtitle}>
                 Create your first database backup to enable recovery options.
+              </Text>
+            </View>
+          }
+          showsVerticalScrollIndicator={false}
+        />
+      ) : (
+        <FlatList
+          data={recoveries}
+          keyExtractor={(item) => String(item.id)}
+          renderItem={renderRecovery}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => loadBackups(true)}
+              tintColor="#111827"
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconWrap}>
+                <Ionicons name="refresh-circle-outline" size={32} color="#B6BEC9" />
+              </View>
+              <Text style={styles.emptyTitle}>No recovery jobs yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Restore a completed backup to create a recovery job.
               </Text>
             </View>
           }
@@ -718,13 +766,56 @@ const styles = StyleSheet.create({
     color: "#A16207",
     marginTop: 6,
   },
-  recoverySection: { marginHorizontal: 16, marginBottom: 12, gap: 8 },
-  sectionTitle: {
+  tabs: {
+    minHeight: 48,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 14,
+    backgroundColor: "#E9EDF4",
+    padding: 4,
+    flexDirection: "row",
+    gap: 4,
+  },
+  tabButton: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    paddingHorizontal: 8,
+  },
+  tabButtonActive: {
+    backgroundColor: "#fff",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  tabLabel: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#334155",
-    marginBottom: 2,
+    color: "#64748B",
   },
+  tabLabelActive: { color: "#111827" },
+  tabCount: {
+    minWidth: 24,
+    height: 22,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#CBD5E1",
+    paddingHorizontal: 7,
+  },
+  tabCountActive: { backgroundColor: "#111827" },
+  tabCountText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#475569",
+  },
+  tabCountTextActive: { color: "#fff" },
   recoveryCard: {
     borderRadius: 14,
     borderWidth: 1,
