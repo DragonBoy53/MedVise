@@ -7,6 +7,7 @@ const {
 const {
   getChatSessionForUser,
   listChatSessionsForUser,
+  normalizeChatSessionId,
   persistChatInteraction,
 } = require("../services/chatPersistenceService");
 const {
@@ -109,7 +110,7 @@ async function chatController(req, res) {
 
   try {
     const message = req.body.message || "";
-    const chatSessionId = req.body.chatSessionId || null;
+    const chatSessionId = normalizeChatSessionId(req.body.chatSessionId);
     const promptText = message || (file ? "Please analyze this medical image." : "Hello");
     const history = parseHistory(req.body.history);
     let imageAttachment = null;

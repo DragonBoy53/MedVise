@@ -12,6 +12,19 @@ function isMissingColumnError(error) {
   return error?.code === "42703";
 }
 
+function normalizeChatSessionId(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed || trimmed === "null" || trimmed === "undefined") {
+    return null;
+  }
+
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    trimmed,
+  )
+    ? trimmed
+    : null;
+}
+
 function summarizeInteraction({ userMessage, assistantMessage, prediction, hadImage }) {
   const lines = [];
 
@@ -59,8 +72,9 @@ async function persistChatInteraction({
     await client.query("BEGIN");
 
     let activeChatSessionId = null;
+    const requestedChatSessionId = normalizeChatSessionId(chatSessionId);
 
-    if (chatSessionId && clerkUserId) {
+    if (requestedChatSessionId && clerkUserId) {
       const existingSession = await client.query(
         `
           SELECT id
@@ -69,7 +83,7 @@ async function persistChatInteraction({
             AND clerk_user_id = $2
           LIMIT 1
         `,
-        [chatSessionId, clerkUserId],
+        [requestedChatSessionId, clerkUserId],
       );
       activeChatSessionId = existingSession.rows[0]?.id || null;
     }
@@ -189,14 +203,25 @@ async function persistChatInteraction({
     }
 
     if (prediction?.id && activeChatSessionId) {
-      await client.query(
-        `
-          UPDATE prediction_events
-          SET chat_session_id = $2
-          WHERE id = $1
-        `,
-        [prediction.id, activeChatSessionId],
-      );
+      await client.query("SAVEPOINT prediction_event_attach");
+      try {
+        await client.query(
+          `
+            UPDATE prediction_events
+            SET chat_session_id = $2
+            WHERE id = $1
+          `,
+          [prediction.id, activeChatSessionId],
+        );
+        await client.query("RELEASE SAVEPOINT prediction_event_attach");
+      } catch (error) {
+        await client.query("ROLLBACK TO SAVEPOINT prediction_event_attach");
+        await client.query("RELEASE SAVEPOINT prediction_event_attach");
+        console.error(
+          "[chatPersistenceService] Prediction event attach failed; chat messages were kept:",
+          error,
+        );
+      }
     }
 
     await client.query("COMMIT");
@@ -379,5 +404,6 @@ async function getChatSessionForUser({ clerkUserId, chatSessionId }) {
 module.exports = {
   getChatSessionForUser,
   listChatSessionsForUser,
+  normalizeChatSessionId,
   persistChatInteraction,
 };
